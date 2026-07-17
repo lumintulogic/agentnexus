@@ -68,7 +68,10 @@ button {
 .server-meta,
 .message,
 .composer,
-.auth-state {
+.auth-state,
+.dialog-header,
+.connection-summary,
+.dialog-actions {
   display: flex;
   align-items: center;
 }
@@ -223,7 +226,9 @@ h3 {
 .icon-button,
 .send-button,
 .model-picker,
-.model-menu button {
+.provider-tabs button,
+.primary-button,
+.secondary-button {
   border: 1px solid #d8d2c5;
   border-radius: 8px;
   color: #17202a;
@@ -240,7 +245,6 @@ h3 {
 }
 
 .topbar {
-  position: relative;
   justify-content: space-between;
   gap: 14px;
   border-bottom: 1px solid #d8d2c5;
@@ -253,38 +257,6 @@ h3 {
   gap: 8px;
   min-height: 40px;
   padding: 0 12px;
-}
-
-.model-menu {
-  position: absolute;
-  top: 68px;
-  right: 20px;
-  z-index: 2;
-  display: none;
-  gap: 6px;
-  border: 1px solid #d8d2c5;
-  border-radius: 8px;
-  background: #fff;
-  padding: 6px;
-}
-
-.topbar:focus-within .model-menu,
-.topbar:hover .model-menu {
-  display: grid;
-}
-
-.model-menu button {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 140px;
-  min-height: 34px;
-  border: 0;
-  text-align: left;
-}
-
-.model-menu button.active {
-  background: #edf8f4;
 }
 
 .session-grid {
@@ -393,6 +365,121 @@ h3 {
   line-height: 1.4;
 }
 
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(23, 32, 42, 0.38);
+  padding: 18px;
+}
+
+.model-dialog {
+  display: grid;
+  gap: 18px;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  background: #fff;
+  box-shadow: 0 24px 90px rgba(23, 32, 42, 0.24);
+  padding: 20px;
+}
+
+.dialog-header {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.model-form {
+  display: grid;
+  gap: 14px;
+}
+
+.provider-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.provider-tabs button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 10px;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.provider-tabs button.active {
+  border-color: #34c6a2;
+  background: #edf8f4;
+}
+
+.field-control {
+  display: grid;
+  gap: 7px;
+  color: #485668;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.field-control input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  outline: 0;
+  background: #fff;
+  color: #17202a;
+  padding: 0 12px;
+  font-weight: 500;
+}
+
+.field-control input:focus {
+  border-color: #34c6a2;
+  box-shadow: 0 0 0 3px rgba(52, 198, 162, 0.18);
+}
+
+.connection-summary {
+  gap: 8px;
+  border: 1px solid #cfeae2;
+  border-radius: 8px;
+  background: #f3fbf8;
+  color: #395347;
+  line-height: 1.4;
+  padding: 10px;
+}
+
+.dialog-actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.primary-button,
+.secondary-button {
+  min-height: 40px;
+  padding: 0 14px;
+  font-weight: 800;
+}
+
+.primary-button {
+  color: #fff;
+  border-color: #17202a;
+  background: #17202a;
+}
+
+.primary-button:disabled {
+  cursor: not-allowed;
+  border-color: #d8d2c5;
+  color: #8b95a1;
+  background: #eef1f4;
+}
+
 @media (max-width: 980px) {
   .workspace,
   .session-grid {
@@ -419,9 +506,12 @@ h3 {
     flex-direction: column;
   }
 
-  .model-menu {
-    top: 106px;
-    left: 20px;
-    right: auto;
+  .provider-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dialog-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
   }
 }

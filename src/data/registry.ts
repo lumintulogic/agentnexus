@@ -47,7 +47,7 @@ export const marketplaceServers: MarketplaceServer[] = [
     transport: "WebSocket",
     authMode: "bearer",
     status: "available",
-    endpoint: "wss://mcp.agentnexus.dev/postgres",
+    endpoint: "ws://localhost:8787/mcp/postgres",
     description: "Schema introspection, safe read queries, explain plans, and migration previews.",
     tools: ["inspect_schema", "run_read_query", "explain_query"]
   },

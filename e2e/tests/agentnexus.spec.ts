@@ -52,12 +52,34 @@ test.describe("AgentNexus scaffold", () => {
     await expect(marketplace.locator("article", { hasText: "Postgres Tools" }).getByText("Installed")).toBeVisible();
   });
 
-  test("switches model provider menu selection", async ({ page }) => {
+  test("connects a model from the model dialog", async ({ page }) => {
     await openApp(page);
 
-    await page.getByRole("button", { name: "Selected model: OpenAI" }).hover();
-    await page.getByRole("button", { name: "Select Anthropic" }).click();
+    await page.getByRole("button", { name: "Selected model: OpenAI" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Connect a Model" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Connect model" })).toBeDisabled();
+
+    await dialog.getByRole("button", { name: "Anthropic" }).click();
+    await expect(dialog.getByLabel("Model ID")).toHaveValue("claude-3-5-sonnet-latest");
+    await dialog.getByLabel("API key").fill("sk-ant-test");
+    await dialog.getByRole("button", { name: "Connect model" }).click();
 
     await expect(page.getByRole("button", { name: "Selected model: Anthropic" })).toBeVisible();
+    await expect(page.getByText("Encrypted Anthropic token stored in session vault")).toBeVisible();
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("executes a mock MCP tool call from the composer", async ({ page }) => {
+    await openApp(page);
+    const marketplace = page.getByLabel("Marketplace and server manager");
+
+    await marketplace.getByRole("button", { name: "Postgres Tools Available" }).click();
+    await page.getByLabel("Chat prompt").fill("/tool inspect_schema users");
+    await page.getByLabel("Send prompt").click();
+
+    await expect(page.getByText("inspect_schema result")).toBeVisible();
+    await expect(page.getByText('inspect_schema accepted "users" through ws://localhost:8787/mcp/postgres.')).toBeVisible();
   });
 });

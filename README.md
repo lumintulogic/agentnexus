@@ -59,6 +59,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - `src/pages/` contains Astro routes.
 - `public/` contains PWA metadata and static assets.
 - `e2e/` is a separate Node package for Playwright end-to-end tests.
+- `tools/mock-mcp-websocket-server.mjs` is a local JSON-RPC WebSocket fixture for live MCP capability discovery tests.
 
 ## Development
 
@@ -73,6 +74,14 @@ Run the Astro dev server:
 ```sh
 npm run dev
 ```
+
+Run the mock MCP WebSocket server:
+
+```sh
+npm run mock:mcp
+```
+
+It listens at `ws://localhost:8787/mcp/postgres` and supports `initialize`, `tools/list`, and `tools/call`.
 
 Build and type-check the app:
 

@@ -4,6 +4,7 @@ import {
   Check,
   ChevronsUpDown,
   KeyRound,
+  Link,
   PlugZap,
   Search,
   Send,
@@ -11,19 +12,33 @@ import {
   Store,
   TerminalSquare,
   ToggleLeft,
-  ToggleRight
+  ToggleRight,
+  X
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { marketplaceServers, modelProviders, type MarketplaceServer } from "@/data/registry";
-import { createMockCapabilityHandshake } from "@/lib/mcp";
+import { createMockCapabilityHandshake, executeMockToolCall } from "@/lib/mcp";
 import "./AgentNexusApp.css";
 
 type ServerState = Record<string, MarketplaceServer["status"]>;
+type ChatMessage = {
+  id: string;
+  role: "assistant" | "user";
+  title: string;
+  body: string;
+};
 
 const statusLabels: Record<MarketplaceServer["status"], string> = {
   active: "Active",
   installed: "Installed",
   available: "Available"
+};
+
+const defaultModelIds: Record<string, string> = {
+  OpenAI: "gpt-4.1",
+  Anthropic: "claude-3-5-sonnet-latest",
+  Ollama: "llama3.1",
+  Custom: ""
 };
 
 function getNextStatus(status: MarketplaceServer["status"]): MarketplaceServer["status"] {
@@ -35,7 +50,29 @@ function getNextStatus(status: MarketplaceServer["status"]): MarketplaceServer["
 export default function AgentNexusApp() {
   const [hydrated, setHydrated] = useState(false);
   const [query, setQuery] = useState("");
+  const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(modelProviders[0]);
+  const [connectedModelId, setConnectedModelId] = useState(defaultModelIds[modelProviders[0]]);
+  const [modelSecretLabel, setModelSecretLabel] = useState("No model token connected");
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [draftProvider, setDraftProvider] = useState(modelProviders[0]);
+  const [modelId, setModelId] = useState(defaultModelIds[modelProviders[0]]);
+  const [modelEndpoint, setModelEndpoint] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    {
+      id: "handshake",
+      role: "assistant",
+      title: "Capability handshake ready",
+      body: ""
+    },
+    {
+      id: "install-request",
+      role: "user",
+      title: "Install request",
+      body: "Pull the exposed tool schema, attach stored auth headers when required, and keep active servers available for tool-call routing."
+    }
+  ]);
   const [serverState, setServerState] = useState<ServerState>(
     Object.fromEntries(marketplaceServers.map((server) => [server.id, server.status]))
   );
@@ -53,6 +90,9 @@ export default function AgentNexusApp() {
   const activeServers = servers.filter((server) => server.status === "active");
   const focusedServer = servers.find((server) => server.id === activeServerId) ?? servers[0];
   const handshake = createMockCapabilityHandshake(focusedServer);
+  const visibleMessages = messages.map((message) =>
+    message.id === "handshake" ? { ...message, body: handshake.promptFragment } : message
+  );
 
   useEffect(() => {
     setHydrated(true);
@@ -63,6 +103,94 @@ export default function AgentNexusApp() {
     setServerState((current) => ({ ...current, [server.id]: nextStatus }));
     setActiveServerId(server.id);
   }
+
+  function selectDraftProvider(provider: string) {
+    setDraftProvider(provider);
+    setModelId(defaultModelIds[provider] ?? "");
+    setModelEndpoint(provider === "Ollama" ? "http://localhost:11434" : "");
+    setApiKey("");
+  }
+
+  function connectModel(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    setSelectedModel(draftProvider);
+    setConnectedModelId(modelId.trim());
+    setModelSecretLabel(
+      requiresApiKey
+        ? `Encrypted ${draftProvider} token stored in session vault`
+        : `${draftProvider} local endpoint connected`
+    );
+    sessionStorage.setItem(
+      "agentnexus:model-connection",
+      JSON.stringify({
+        provider: draftProvider,
+        modelId: modelId.trim(),
+        endpoint: modelEndpoint.trim() || null,
+        tokenRef: requiresApiKey ? `session:${crypto.randomUUID()}` : null
+      })
+    );
+    setModelDialogOpen(false);
+  }
+
+  function sendPrompt() {
+    const trimmedPrompt = prompt.trim();
+    if (!trimmedPrompt) return;
+
+    const [command, toolName, ...queryParts] = trimmedPrompt.split(" ");
+    const userMessage: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      title: "User prompt",
+      body: trimmedPrompt
+    };
+
+    if (command === "/tool" && toolName) {
+      try {
+        const result = executeMockToolCall(focusedServer, toolName, queryParts.join(" ") || "No query supplied");
+        setMessages((current) => [
+          ...current,
+          userMessage,
+          {
+            id: `tool-${Date.now()}`,
+            role: "assistant",
+            title: `${result.toolName} result`,
+            body: result.content
+          }
+        ]);
+      } catch (error) {
+        setMessages((current) => [
+          ...current,
+          userMessage,
+          {
+            id: `tool-error-${Date.now()}`,
+            role: "assistant",
+            title: "Tool call blocked",
+            body: error instanceof Error ? error.message : "The selected tool call could not be executed."
+          }
+        ]);
+      }
+    } else {
+      setMessages((current) => [
+        ...current,
+        userMessage,
+        {
+          id: `assistant-${Date.now()}`,
+          role: "assistant",
+          title: `${selectedModel} routed prompt`,
+          body: `Using ${connectedModelId}, AgentNexus would route this prompt with ${activeServers.length} active MCP integration${activeServers.length === 1 ? "" : "s"}.`
+        }
+      ]);
+    }
+
+    setPrompt("");
+  }
+
+  const requiresEndpoint = draftProvider === "Custom" || draftProvider === "Ollama";
+  const requiresApiKey = draftProvider !== "Ollama";
+  const canConnect =
+    modelId.trim().length > 0 &&
+    (!requiresEndpoint || modelEndpoint.trim().length > 0) &&
+    (!requiresApiKey || apiKey.trim().length > 0);
 
   return (
     <main className="app-shell" data-testid="agentnexus-app" data-hydrated={hydrated}>
@@ -136,50 +264,47 @@ export default function AgentNexusApp() {
               <p className="eyebrow">Live session</p>
               <h2>Model-agnostic Chat Playground</h2>
             </div>
-            <button className="model-picker" type="button" aria-label={`Selected model: ${selectedModel}`}>
+            <button
+              className="model-picker"
+              type="button"
+              aria-label={`Selected model: ${selectedModel}`}
+              onClick={() => {
+                setDraftProvider(selectedModel);
+                setModelDialogOpen(true);
+              }}
+            >
               <Bot size={18} aria-hidden="true" />
               <span>{selectedModel}</span>
               <ChevronsUpDown size={16} aria-hidden="true" />
             </button>
-            <div className="model-menu" aria-label="Model providers">
-              {modelProviders.map((provider) => (
-                <button
-                  key={provider}
-                  className={provider === selectedModel ? "active" : ""}
-                  type="button"
-                  aria-label={`Select ${provider}`}
-                  onClick={() => setSelectedModel(provider)}
-                >
-                  {provider === selectedModel && <Check size={14} aria-hidden="true" />}
-                  {provider}
-                </button>
-              ))}
-            </div>
           </header>
 
           <div className="session-grid">
             <section className="conversation">
-              <div className="message assistant">
-                <span className="message-icon">
-                  <Activity size={17} aria-hidden="true" />
-                </span>
-                <div>
-                  <strong>Capability handshake ready</strong>
-                  <p>{handshake.promptFragment}</p>
+              {visibleMessages.map((message) => (
+                <div className={`message ${message.role}`} key={message.id}>
+                  {message.role === "assistant" && (
+                    <span className="message-icon">
+                      <Activity size={17} aria-hidden="true" />
+                    </span>
+                  )}
+                  <div>
+                    <strong>{message.title}</strong>
+                    <p>{message.body}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="message user">
-                <div>
-                  <strong>Install request</strong>
-                  <p>
-                    Pull the exposed tool schema, attach stored auth headers when required, and keep active
-                    servers available for tool-call routing.
-                  </p>
-                </div>
-              </div>
+              ))}
               <div className="composer">
-                <input placeholder="Ask a model to use installed MCP tools..." aria-label="Chat prompt" />
-                <button className="send-button" type="button" aria-label="Send prompt" title="Send prompt">
+                <input
+                  placeholder={`Ask ${connectedModelId} to use installed MCP tools...`}
+                  aria-label="Chat prompt"
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") sendPrompt();
+                  }}
+                />
+                <button className="send-button" type="button" aria-label="Send prompt" title="Send prompt" onClick={sendPrompt}>
                   <Send size={18} />
                 </button>
               </div>
@@ -214,6 +339,10 @@ export default function AgentNexusApp() {
                       : `${focusedServer.authMode.toUpperCase()} token stored in encrypted session scope`}
                   </span>
                 </div>
+                <div className="auth-state">
+                  <Bot size={18} aria-hidden="true" />
+                  <span>{modelSecretLabel}</span>
+                </div>
               </section>
 
               <section>
@@ -233,6 +362,103 @@ export default function AgentNexusApp() {
           </div>
         </section>
       </section>
+
+      {modelDialogOpen && (
+        <div className="dialog-backdrop" role="presentation">
+          <section
+            aria-labelledby="connect-model-title"
+            aria-modal="true"
+            className="model-dialog"
+            role="dialog"
+          >
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">Model connection</p>
+                <h2 id="connect-model-title">Connect a Model</h2>
+              </div>
+              <button
+                aria-label="Close dialog"
+                className="icon-button"
+                type="button"
+                onClick={() => setModelDialogOpen(false)}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            <form className="model-form" onSubmit={connectModel}>
+              <div className="provider-tabs" aria-label="Model providers">
+                {modelProviders.map((provider) => (
+                  <button
+                    key={provider}
+                    className={provider === draftProvider ? "active" : ""}
+                    type="button"
+                    aria-pressed={provider === draftProvider}
+                    onClick={() => selectDraftProvider(provider)}
+                  >
+                    {provider === draftProvider && <Check size={14} aria-hidden="true" />}
+                    {provider}
+                  </button>
+                ))}
+              </div>
+
+              <label className="field-control">
+                <span>Model ID</span>
+                <input
+                  aria-label="Model ID"
+                  value={modelId}
+                  placeholder="gpt-4.1, claude-3-5-sonnet-latest, llama3.1"
+                  onChange={(event) => setModelId(event.target.value)}
+                  required
+                />
+              </label>
+
+              {requiresEndpoint && (
+                <label className="field-control">
+                  <span>Endpoint</span>
+                  <input
+                    aria-label="Model endpoint"
+                    value={modelEndpoint}
+                    placeholder={draftProvider === "Ollama" ? "http://localhost:11434" : "https://api.example.com/v1"}
+                    onChange={(event) => setModelEndpoint(event.target.value)}
+                    required
+                  />
+                </label>
+              )}
+
+              {requiresApiKey && (
+                <label className="field-control">
+                  <span>API key</span>
+                  <input
+                    aria-label="API key"
+                    type="password"
+                    value={apiKey}
+                    placeholder="Stored only for this browser session"
+                    onChange={(event) => setApiKey(event.target.value)}
+                    required
+                  />
+                </label>
+              )}
+
+              <div className="connection-summary">
+                <Link size={17} aria-hidden="true" />
+                <span>
+                  {draftProvider} will route chat requests through {modelId.trim() || "the selected model"}.
+                </span>
+              </div>
+
+              <div className="dialog-actions">
+                <button className="secondary-button" type="button" onClick={() => setModelDialogOpen(false)}>
+                  Cancel
+                </button>
+                <button className="primary-button" type="submit" disabled={!canConnect}>
+                  Connect model
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

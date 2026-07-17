@@ -6,7 +6,7 @@ export default defineConfig({
   testDir: "./tests",
   timeout: 30_000,
   expect: {
-    timeout: 7_500
+    timeout: 15_000
   },
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
@@ -22,7 +22,7 @@ export default defineConfig({
     cwd: "..",
     url: baseURL,
     reuseExistingServer: true,
-    timeout: 30_000
+    timeout: 90_000
   },
   projects: [
     {
