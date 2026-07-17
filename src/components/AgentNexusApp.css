@@ -1,0 +1,427 @@
+:root {
+  color-scheme: light;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f7f5ef;
+  color: #17202a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(52, 198, 162, 0.1), rgba(52, 198, 162, 0) 280px),
+    #f7f5ef;
+  padding: 18px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 18px;
+  min-height: calc(100vh - 36px);
+}
+
+.marketplace-panel,
+.chat-panel {
+  border: 1px solid #d8d2c5;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 20px 80px rgba(23, 32, 42, 0.08);
+}
+
+.marketplace-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  border-radius: 8px;
+  padding: 18px;
+}
+
+.chat-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.brand-header,
+.topbar,
+.panel-heading,
+.server-title-row,
+.server-meta,
+.message,
+.composer,
+.auth-state {
+  display: flex;
+  align-items: center;
+}
+
+.brand-header {
+  gap: 12px;
+}
+
+.brand-mark,
+.message-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #f7f5ef;
+  background: #17202a;
+}
+
+.brand-mark {
+  width: 42px;
+  height: 42px;
+  border-radius: 8px;
+}
+
+.eyebrow {
+  margin: 0 0 3px;
+  color: #697586;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+h3 {
+  font-size: 0.95rem;
+}
+
+.search-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  background: #fff;
+  padding: 11px 12px;
+}
+
+.search-control input,
+.composer input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #17202a;
+}
+
+.panel-heading {
+  gap: 8px;
+}
+
+.panel-heading.compact {
+  margin-bottom: 10px;
+}
+
+.server-list {
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.server-card {
+  border: 1px solid #ddd7c8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 12px;
+}
+
+.server-card.selected {
+  border-color: #34c6a2;
+  box-shadow: inset 3px 0 0 #34c6a2;
+}
+
+.server-main {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+  background: transparent;
+}
+
+.server-main > span:last-child {
+  color: #596778;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.server-title-row {
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.status-pill {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.status-pill.active {
+  color: #0f513f;
+  background: #c9f4e8;
+}
+
+.status-pill.installed {
+  color: #744210;
+  background: #ffe5b4;
+}
+
+.status-pill.available {
+  color: #485668;
+  background: #e9edf2;
+}
+
+.server-meta {
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  color: #697586;
+  font-size: 0.78rem;
+}
+
+.icon-button,
+.send-button,
+.model-picker,
+.model-menu button {
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  color: #17202a;
+  background: #fff;
+}
+
+.icon-button,
+.send-button {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+}
+
+.topbar {
+  position: relative;
+  justify-content: space-between;
+  gap: 14px;
+  border-bottom: 1px solid #d8d2c5;
+  padding: 18px 20px;
+}
+
+.model-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.model-menu {
+  position: absolute;
+  top: 68px;
+  right: 20px;
+  z-index: 2;
+  display: none;
+  gap: 6px;
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  background: #fff;
+  padding: 6px;
+}
+
+.topbar:focus-within .model-menu,
+.topbar:hover .model-menu {
+  display: grid;
+}
+
+.model-menu button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 140px;
+  min-height: 34px;
+  border: 0;
+  text-align: left;
+}
+
+.model-menu button.active {
+  background: #edf8f4;
+}
+
+.session-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 0;
+  min-height: 0;
+  flex: 1;
+}
+
+.conversation {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+}
+
+.message {
+  gap: 12px;
+  max-width: 760px;
+  border: 1px solid #ddd7c8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 14px;
+}
+
+.message p {
+  margin-top: 5px;
+  color: #596778;
+  line-height: 1.5;
+}
+
+.message.user {
+  align-self: flex-end;
+  background: #17202a;
+  color: #fff;
+}
+
+.message.user p {
+  color: #dfe6ee;
+}
+
+.message-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+}
+
+.composer {
+  gap: 10px;
+  margin-top: auto;
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  background: #fff;
+  padding: 8px;
+}
+
+.composer input {
+  min-height: 40px;
+  padding: 0 6px;
+}
+
+.send-button {
+  color: #fff;
+  background: #17202a;
+}
+
+.runtime-panel {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  border-left: 1px solid #d8d2c5;
+  padding: 20px;
+}
+
+.tool-list,
+.active-server-list {
+  display: grid;
+  gap: 8px;
+}
+
+.tool-row,
+.active-server-list span,
+.auth-state {
+  border: 1px solid #ddd7c8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.tool-row {
+  display: grid;
+  gap: 4px;
+}
+
+.tool-row span,
+.auth-state,
+.active-server-list span {
+  color: #596778;
+  font-size: 0.88rem;
+}
+
+.auth-state {
+  gap: 8px;
+  line-height: 1.4;
+}
+
+@media (max-width: 980px) {
+  .workspace,
+  .session-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-panel {
+    border-left: 0;
+    border-top: 1px solid #d8d2c5;
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 10px;
+  }
+
+  .workspace {
+    min-height: calc(100vh - 20px);
+  }
+
+  .topbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .model-menu {
+    top: 106px;
+    left: 20px;
+    right: auto;
+  }
+}

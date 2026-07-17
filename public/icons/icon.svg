@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="AgentNexus icon">
+  <rect width="128" height="128" rx="24" fill="#17202a"/>
+  <path d="M31 80V48l33-19 33 19v32L64 99 31 80Z" fill="none" stroke="#f6f3ed" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M64 29v70M31 48l33 19 33-19" fill="none" stroke="#34c6a2" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

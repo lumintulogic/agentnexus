@@ -1,0 +1,17 @@
+{
+  "name": "AgentNexus",
+  "short_name": "AgentNexus",
+  "description": "A model-agnostic marketplace and operating layer for MCP server integrations.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f3ed",
+  "theme_color": "#17202a",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
