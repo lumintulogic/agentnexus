@@ -28,6 +28,7 @@ import {
   loadDirectusAuthSession,
   loadDirectusMarketplaceServers,
   persistDirectusModelConnection,
+  persistDirectusPrivateMcpRegistration,
   persistDirectusServerInstall,
   readDirectusAccessToken
 } from "@/lib/directus";
@@ -65,6 +66,16 @@ type AuthSession = {
   profileId?: string;
 };
 type RegistrySource = "fallback" | "directus";
+type EnterpriseDraft = {
+  tenantName: string;
+  appName: string;
+  appUrl: string;
+  roleName: string;
+  serverName: string;
+  endpointUrl: string;
+  customHeaderName: string;
+  tools: string;
+};
 
 const statusLabels: Record<MarketplaceServer["status"], string> = {
   active: "Active",
@@ -113,6 +124,17 @@ export default function AgentNexusApp() {
   const [connectedModelId, setConnectedModelId] = useState(defaultModelIds[modelProviders[0]]);
   const [modelSecretLabel, setModelSecretLabel] = useState("No model token connected");
   const [modelDialogOpen, setModelDialogOpen] = useState(false);
+  const [enterpriseDialogOpen, setEnterpriseDialogOpen] = useState(false);
+  const [enterpriseDraft, setEnterpriseDraft] = useState<EnterpriseDraft>({
+    tenantName: "Acme Premium",
+    appName: "Acme Analyst App",
+    appUrl: "https://acme.example/app",
+    roleName: "analyst",
+    serverName: "Acme Private Reports",
+    endpointUrl: "https://mcp.acme.example/reports",
+    customHeaderName: "X-Acme-Workspace",
+    tools: "search_reports, summarize_report"
+  });
   const [draftProvider, setDraftProvider] = useState(modelProviders[0]);
   const [modelId, setModelId] = useState(defaultModelIds[modelProviders[0]]);
   const [modelEndpoint, setModelEndpoint] = useState("");
@@ -423,6 +445,79 @@ export default function AgentNexusApp() {
     setApiKey("");
   }
 
+  function buildEnterpriseOidcUrl(context: NonNullable<MarketplaceServer["tenantContext"]>, clientId: string) {
+    const url = new URL("/oidc/authorize", window.location.origin);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("client_id", clientId);
+    url.searchParams.set("redirect_uri", context.appUrl);
+    url.searchParams.set("scope", "openid profile email agentnexus.enterprise");
+    url.searchParams.set("login_hint", authSession?.email ?? "common-user@agentnexus.local");
+    url.searchParams.set("tenant_id", context.tenantId);
+    url.searchParams.set("app_id", context.appId);
+    url.searchParams.set("app_url", context.appUrl);
+    url.searchParams.set("role_id", context.roleId);
+    url.searchParams.set("role_name", context.roleName);
+    return url.toString();
+  }
+
+  async function registerPrivateMcp(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    const tenantId = `tenant:${crypto.randomUUID()}`;
+    const appId = `app:${crypto.randomUUID()}`;
+    const roleId = `role:${crypto.randomUUID()}`;
+    const serverId = `private:${crypto.randomUUID()}`;
+    const tools = enterpriseDraft.tools
+      .split(",")
+      .map((tool) => tool.trim())
+      .filter(Boolean);
+    const context = {
+      tenantId,
+      appId,
+      appUrl: enterpriseDraft.appUrl.trim(),
+      roleId,
+      roleName: enterpriseDraft.roleName.trim(),
+      oidcAuthorizeUrl: ""
+    };
+    const oidcAuthorizeUrl = buildEnterpriseOidcUrl(context, `anx_${appId.replace(/[^a-zA-Z0-9]/g, "")}`);
+    const privateServer: MarketplaceServer = {
+      id: serverId,
+      name: enterpriseDraft.serverName.trim(),
+      vendor: enterpriseDraft.tenantName.trim(),
+      category: "Private",
+      transport: "HTTP/SSE",
+      authMode: "oauth",
+      status: "installed",
+      endpoint: enterpriseDraft.endpointUrl.trim(),
+      description: `Private MCP server for ${enterpriseDraft.appName.trim()} with ${enterpriseDraft.roleName.trim()} role scope.`,
+      tools,
+      visibility: "private",
+      tenantContext: { ...context, oidcAuthorizeUrl }
+    };
+
+    setRegistryServers((current) => [privateServer, ...current.filter((server) => server.id !== serverId)]);
+    setServerState((current) => ({ ...current, [serverId]: "installed" }));
+    setActiveServerId(serverId);
+    setEnterpriseDialogOpen(false);
+
+    try {
+      const result = await persistDirectusPrivateMcpRegistration({
+        accessToken: authSession?.accessToken,
+        profileId: authSession?.profileId,
+        tenantName: enterpriseDraft.tenantName.trim(),
+        appName: enterpriseDraft.appName.trim(),
+        appUrl: enterpriseDraft.appUrl.trim(),
+        roleName: enterpriseDraft.roleName.trim(),
+        serverName: enterpriseDraft.serverName.trim(),
+        endpointUrl: enterpriseDraft.endpointUrl.trim(),
+        customHeaderName: enterpriseDraft.customHeaderName.trim() || null,
+        tools
+      });
+      setSyncStatus(result.detail);
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : "Directus private MCP registration failed");
+    }
+  }
+
   async function connectModel(event: { preventDefault: () => void }) {
     event.preventDefault();
     const tokenRef = requiresApiKey ? `session:${crypto.randomUUID()}` : null;
@@ -552,6 +647,14 @@ export default function AgentNexusApp() {
   const canConnectServerCredential =
     authDialogServer?.authMode === "oauth" ||
     (authDialogServer?.authMode === "bearer" && serverTokenDraft.trim().length >= 8);
+  const canRegisterPrivateMcp =
+    enterpriseDraft.tenantName.trim().length > 0 &&
+    enterpriseDraft.appName.trim().length > 0 &&
+    enterpriseDraft.appUrl.trim().startsWith("http") &&
+    enterpriseDraft.roleName.trim().length > 0 &&
+    enterpriseDraft.serverName.trim().length > 0 &&
+    enterpriseDraft.endpointUrl.trim().startsWith("http") &&
+    enterpriseDraft.tools.split(",").some((tool) => tool.trim().length > 0);
 
   if (!authSession) {
     return (
@@ -692,6 +795,9 @@ export default function AgentNexusApp() {
             <small>{registrySource === "directus" ? "Directus registry" : "Prototype registry"}</small>
           </div>
           {registryError && <p className="panel-note">{registryError}</p>}
+          <button className="primary-button full-width" type="button" onClick={() => setEnterpriseDialogOpen(true)}>
+            Register private MCP
+          </button>
 
           <div className="server-list">
             {servers
@@ -715,6 +821,7 @@ export default function AgentNexusApp() {
                   <div className="server-meta">
                     <span>{server.transport}</span>
                     <span>{server.authMode === "none" ? "No auth" : server.authMode.toUpperCase()}</span>
+                    {server.visibility === "private" && <span>Private</span>}
                     <button
                       className="icon-button"
                       type="button"
@@ -866,10 +973,145 @@ export default function AgentNexusApp() {
                   )}
                 </div>
               </section>
+
+              {focusedServer.tenantContext && (
+                <section>
+                  <div className="panel-heading compact">
+                    <ShieldCheck size={17} aria-hidden="true" />
+                    <h3>Enterprise Context</h3>
+                  </div>
+                  <div className="tool-list">
+                    <div className="tool-row">
+                      <strong>{focusedServer.tenantContext.roleName}</strong>
+                      <span>{focusedServer.tenantContext.tenantId}</span>
+                    </div>
+                    <div className="tool-row">
+                      <strong>OIDC authorize URL</strong>
+                      <span>{focusedServer.tenantContext.oidcAuthorizeUrl}</span>
+                    </div>
+                  </div>
+                </section>
+              )}
             </aside>
           </div>
         </section>
       </section>
+
+      {enterpriseDialogOpen && (
+        <div className="dialog-backdrop" role="presentation">
+          <section
+            aria-labelledby="private-mcp-title"
+            aria-modal="true"
+            className="model-dialog"
+            role="dialog"
+          >
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">Enterprise private integration</p>
+                <h2 id="private-mcp-title">Register Private MCP</h2>
+              </div>
+              <button
+                aria-label="Close private MCP dialog"
+                className="icon-button"
+                type="button"
+                onClick={() => setEnterpriseDialogOpen(false)}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            <form className="model-form" onSubmit={registerPrivateMcp}>
+              <label className="field-control">
+                <span>Tenant name</span>
+                <input
+                  aria-label="Tenant name"
+                  value={enterpriseDraft.tenantName}
+                  onChange={(event) => setEnterpriseDraft((current) => ({ ...current, tenantName: event.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field-control">
+                <span>App name</span>
+                <input
+                  aria-label="App name"
+                  value={enterpriseDraft.appName}
+                  onChange={(event) => setEnterpriseDraft((current) => ({ ...current, appName: event.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field-control">
+                <span>App URL</span>
+                <input
+                  aria-label="App URL"
+                  value={enterpriseDraft.appUrl}
+                  onChange={(event) => setEnterpriseDraft((current) => ({ ...current, appUrl: event.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field-control">
+                <span>Role name</span>
+                <input
+                  aria-label="Role name"
+                  value={enterpriseDraft.roleName}
+                  onChange={(event) => setEnterpriseDraft((current) => ({ ...current, roleName: event.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field-control">
+                <span>Server name</span>
+                <input
+                  aria-label="Server name"
+                  value={enterpriseDraft.serverName}
+                  onChange={(event) => setEnterpriseDraft((current) => ({ ...current, serverName: event.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field-control">
+                <span>MCP endpoint</span>
+                <input
+                  aria-label="MCP endpoint"
+                  value={enterpriseDraft.endpointUrl}
+                  onChange={(event) => setEnterpriseDraft((current) => ({ ...current, endpointUrl: event.target.value }))}
+                  required
+                />
+              </label>
+              <label className="field-control">
+                <span>Custom header</span>
+                <input
+                  aria-label="Custom header"
+                  value={enterpriseDraft.customHeaderName}
+                  onChange={(event) =>
+                    setEnterpriseDraft((current) => ({ ...current, customHeaderName: event.target.value }))
+                  }
+                />
+              </label>
+              <label className="field-control">
+                <span>Tools</span>
+                <input
+                  aria-label="Private MCP tools"
+                  value={enterpriseDraft.tools}
+                  onChange={(event) => setEnterpriseDraft((current) => ({ ...current, tools: event.target.value }))}
+                  required
+                />
+              </label>
+
+              <div className="connection-summary">
+                <ShieldCheck size={17} aria-hidden="true" />
+                <span>Invited users receive identity plus tenant/app/role claims for this private MCP app.</span>
+              </div>
+
+              <div className="dialog-actions">
+                <button className="secondary-button" type="button" onClick={() => setEnterpriseDialogOpen(false)}>
+                  Cancel
+                </button>
+                <button className="primary-button" type="submit" disabled={!canRegisterPrivateMcp}>
+                  Register private server
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
 
       {modelDialogOpen && (
         <div className="dialog-backdrop" role="presentation">

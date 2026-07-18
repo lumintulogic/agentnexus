@@ -28,6 +28,10 @@ type DirectusMcpServer = {
   tool_schema?: unknown;
 };
 
+type DirectusCreatedItem = {
+  id: string;
+};
+
 export type DirectusAuthSession = {
   name: string;
   email: string;
@@ -294,4 +298,109 @@ export async function persistDirectusModelConnection(input: {
   }
 
   return { ok: true, detail: "Model connection synced to Directus" };
+}
+
+export async function persistDirectusPrivateMcpRegistration(input: {
+  accessToken?: string;
+  profileId?: string;
+  tenantName: string;
+  appName: string;
+  appUrl: string;
+  roleName: string;
+  serverName: string;
+  endpointUrl: string;
+  customHeaderName?: string | null;
+  tools: string[];
+}): Promise<DirectusWriteResult & { tenantId?: string; appId?: string; roleId?: string; serverId?: string }> {
+  if (!input.accessToken || !input.profileId) {
+    return { ok: false, detail: "Private MCP registered for this session" };
+  }
+
+  const slug = input.tenantName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "") || `tenant-${crypto.randomUUID()}`;
+
+  const tenant = await directusJson<DirectusItemResponse<DirectusCreatedItem>>(
+    "/items/anx_tenants",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: input.tenantName,
+        slug: `${slug}-${crypto.randomUUID().slice(0, 8)}`,
+        plan: "enterprise",
+        status: "active",
+        owner_profile: input.profileId,
+        settings: { source: "agentnexus-browser-prototype" }
+      })
+    },
+    input.accessToken
+  );
+
+  const role = await directusJson<DirectusItemResponse<DirectusCreatedItem>>(
+    "/items/anx_tenant_roles",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        tenant: tenant.data.id,
+        name: input.roleName,
+        description: "Prototype private MCP access role",
+        permissions: { mcp: ["invoke"], scope: "private_app" },
+        is_default: true
+      })
+    },
+    input.accessToken
+  );
+
+  const app = await directusJson<DirectusItemResponse<DirectusCreatedItem>>(
+    "/items/anx_mcp_apps",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        tenant: tenant.data.id,
+        name: input.appName,
+        app_url: input.appUrl,
+        visibility: "private",
+        oidc_client_id: `anx_${crypto.randomUUID()}`,
+        redirect_uris: [input.appUrl],
+        allowed_scopes: ["openid", "profile", "email", "agentnexus.enterprise"],
+        status: "active",
+        owner_profile: input.profileId
+      })
+    },
+    input.accessToken
+  );
+
+  const server = await directusJson<DirectusItemResponse<DirectusCreatedItem>>(
+    "/items/anx_mcp_servers",
+    {
+      method: "POST",
+      body: JSON.stringify({
+        app: app.data.id,
+        tenant: tenant.data.id,
+        name: input.serverName,
+        vendor: input.tenantName,
+        category: "Private",
+        transport: "streamable_http",
+        endpoint_url: input.endpointUrl,
+        auth_mode: "oauth",
+        visibility: "private",
+        status: "installed",
+        tool_schema: input.tools.map((name) => ({ name })),
+        custom_headers_schema: input.customHeaderName ? [{ name: input.customHeaderName, source: "tenant_admin" }] : [],
+        description: `Private MCP server for ${input.appName}`
+      })
+    },
+    input.accessToken
+  );
+
+  return {
+    ok: true,
+    detail: "Private MCP registration synced to Directus",
+    tenantId: tenant.data.id,
+    appId: app.data.id,
+    roleId: role.data.id,
+    serverId: server.data.id
+  };
 }

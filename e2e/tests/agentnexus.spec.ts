@@ -118,6 +118,29 @@ test.describe("AgentNexus scaffold", () => {
     await expect(dialog).toHaveCount(0);
   });
 
+  test("registers an enterprise private MCP server with tenant OIDC context", async ({ page }) => {
+    await openApp(page);
+    const marketplace = page.getByLabel("Marketplace and server manager");
+    const runtime = page.getByLabel("Runtime details");
+
+    await page.getByRole("button", { name: "Register private MCP" }).click();
+    const dialog = page.getByRole("dialog", { name: "Register Private MCP" });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("Tenant name")).toHaveValue("Acme Premium");
+    await expect(dialog.getByLabel("Role name")).toHaveValue("analyst");
+    await dialog.getByRole("button", { name: "Register private server" }).click();
+
+    await expect(marketplace.getByText("Acme Private Reports", { exact: true })).toBeVisible();
+    await expect(marketplace.locator("article", { hasText: "Acme Private Reports" }).getByText("Private", { exact: true })).toBeVisible();
+    await expect(runtime.getByRole("heading", { name: "Enterprise Context" })).toBeVisible();
+    await expect(runtime.getByText("analyst", { exact: true })).toBeVisible();
+    await expect(runtime.getByText("/oidc/authorize")).toBeVisible();
+    await expect(runtime.getByText("tenant_id=tenant%3A")).toBeVisible();
+    await expect(runtime.getByText("app_id=app%3A")).toBeVisible();
+    await expect(runtime.getByText("role_name=analyst")).toBeVisible();
+    await expect(runtime.getByText("Private MCP registered for this session")).toBeVisible();
+  });
+
   test("executes a mock MCP tool call from the composer", async ({ page }) => {
     await openApp(page);
     const marketplace = page.getByLabel("Marketplace and server manager");

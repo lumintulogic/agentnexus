@@ -12,6 +12,15 @@ export interface MarketplaceServer {
   endpoint: string;
   description: string;
   tools: string[];
+  visibility?: "public" | "private";
+  tenantContext?: {
+    tenantId: string;
+    appId: string;
+    appUrl: string;
+    roleId: string;
+    roleName: string;
+    oidcAuthorizeUrl: string;
+  };
 }
 
 export const marketplaceServers: MarketplaceServer[] = [

@@ -643,9 +643,17 @@ h3 {
   font-weight: 800;
 }
 
+.full-width {
+  width: 100%;
+}
+
 .inline-action {
   width: 100%;
   margin-top: -8px;
+}
+
+.tool-row span {
+  overflow-wrap: anywhere;
 }
 
 .primary-button {

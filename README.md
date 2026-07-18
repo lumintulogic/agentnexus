@@ -15,6 +15,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - Browser app now attempts to load public MCP marketplace records from Directus and falls back to the prototype registry when Directus is unavailable.
 - Auth screen includes a Directus/Keycloak broker entry point and can hydrate a session from a returned Directus access token.
 - Server authorization dialog added for OAuth/Bearer MCP integrations with encrypted session vault references and automatic Authorization attachment for tool calls.
+- Enterprise private MCP registration added with tenant/app/role context and generated AgentNexus OIDC authorize URLs for invited users.
 - MCP tool-call execution path added for `/tool <tool_name> <query>` chat intents, with SDK execution and mock fallback.
 - Model connection dialog added for provider, endpoint, model ID, and session-scoped API-key metadata.
 - Local Directus and Keycloak compose stacks added under `server/` for the product data and upstream SSO layers.
@@ -173,4 +174,4 @@ Set `PUBLIC_AGENTNEXUS_ISSUER` in `.env` when the browser/dev-server origin is n
 - Replace session-only server credential storage with encrypted token storage and vault references in the AgentNexus data layer.
 - Add AgentNexus OIDC issuer endpoints for downstream MCP app authentication.
 - Connect marketplace, tenant membership, installs, model connections, and token metadata to Directus collections.
-- Add enterprise private MCP server registration and tenant role assignment workflows.
+- Verify enterprise private MCP registration against live Directus permissions and replace prototype tenant IDs with persisted tenant/app/role IDs in the browser flow.
