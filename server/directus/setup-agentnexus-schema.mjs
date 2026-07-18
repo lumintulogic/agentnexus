@@ -327,6 +327,28 @@ const marketplaceSeeds = [
   },
 ];
 
+const publicMarketplacePermissions = [
+  {
+    collection: "anx_mcp_servers",
+    action: "read",
+    permissions: { visibility: { _eq: "public" } },
+    fields: ["id", "name", "vendor", "category", "transport", "auth_mode", "status", "endpoint_url", "description", "tool_schema", "visibility"],
+  },
+];
+
+const appUserCollectionPermissions = [
+  ["anx_user_profiles", ["create", "read", "update"]],
+  ["anx_tenants", ["create", "read", "update"]],
+  ["anx_tenant_roles", ["create", "read", "update"]],
+  ["anx_tenant_memberships", ["create", "read", "update"]],
+  ["anx_mcp_apps", ["create", "read", "update"]],
+  ["anx_mcp_servers", ["create", "read", "update"]],
+  ["anx_user_mcp_installs", ["create", "read", "update"]],
+  ["anx_model_connections", ["create", "read", "update"]],
+  ["anx_token_vault_refs", ["create", "read", "update"]],
+  ["anx_oidc_grants", ["create", "read", "update"]],
+];
+
 function readEnv(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Missing ${filePath}. Copy .env.example to .env and fill the local secrets first.`);
@@ -360,6 +382,15 @@ async function directusRequest(method, pathname, token, body, expected = [200, 2
   return data;
 }
 
+async function firstByName(token, pathname, name, fields = "id,name") {
+  const data = await directusRequest(
+    "GET",
+    `${pathname}?limit=1&fields=${fields}&filter[name][_eq]=${encodeURIComponent(name)}`,
+    token
+  );
+  return data.data[0] ?? null;
+}
+
 async function getToken() {
   const data = await directusRequest("POST", "/auth/login", null, {
     email: env.ADMIN_EMAIL,
@@ -391,6 +422,108 @@ async function createRelation(token, collection, fieldName, relatedCollection) {
     schema: { on_delete: "SET NULL" },
     meta: { sort_field: null },
   });
+}
+
+async function ensureRole(token, name) {
+  const existing = await firstByName(token, "/roles", name, "id,name");
+  if (existing) return { id: existing.id, created: false };
+
+  const created = await directusRequest("POST", "/roles", token, {
+    name,
+    icon: "verified_user",
+    description: "AgentNexus browser prototype role for authenticated API users.",
+    admin_access: false,
+    app_access: false,
+  });
+  return { id: created.data.id, created: true };
+}
+
+async function ensurePolicy(token, name, options = {}) {
+  const existing = await firstByName(token, "/policies", name, "id,name");
+  const payload = {
+    name,
+    icon: options.icon ?? "shield",
+    description: options.description ?? null,
+    admin_access: false,
+    app_access: false,
+    roles: options.roleIds ?? [],
+  };
+
+  if (existing) {
+    await directusRequest("PATCH", `/policies/${existing.id}`, token, payload);
+    return { id: existing.id, created: false };
+  }
+
+  const created = await directusRequest("POST", "/policies", token, payload);
+  return { id: created.data.id, created: true };
+}
+
+async function existingPermission(token, policyId, collection, action) {
+  const data = await directusRequest(
+    "GET",
+    `/permissions?limit=1&fields=id&filter[policy][_eq]=${policyId}&filter[collection][_eq]=${collection}&filter[action][_eq]=${action}`,
+    token
+  );
+  return data.data[0] ?? null;
+}
+
+async function ensurePermission(token, policyId, definition) {
+  const existing = await existingPermission(token, policyId, definition.collection, definition.action);
+  const payload = {
+    policy: policyId,
+    collection: definition.collection,
+    action: definition.action,
+    permissions: definition.permissions ?? null,
+    validation: definition.validation ?? null,
+    presets: definition.presets ?? null,
+    fields: definition.fields ?? ["*"],
+  };
+
+  if (existing) {
+    await directusRequest("PATCH", `/permissions/${existing.id}`, token, payload);
+    return false;
+  }
+
+  await directusRequest("POST", "/permissions", token, payload);
+  return true;
+}
+
+async function ensureAccessPolicy(token) {
+  const appUserRole = await ensureRole(token, "AgentNexus App User");
+  const appUserPolicy = await ensurePolicy(token, "AgentNexus App User API", {
+    roleIds: [appUserRole.id],
+    description: "Allows authenticated AgentNexus users to sync prototype profile, install, model, tenant, and private MCP metadata.",
+  });
+
+  const createdPermissions = [];
+  for (const [collection, actions] of appUserCollectionPermissions) {
+    for (const action of actions) {
+      const created = await ensurePermission(token, appUserPolicy.id, { collection, action });
+      if (created) createdPermissions.push(`${collection}:${action}`);
+    }
+  }
+
+  const publicRole = await firstByName(token, "/roles", "Public", "id,name").catch(() => null);
+  let publicPolicyId = null;
+  if (publicRole?.id) {
+    const publicPolicy = await ensurePolicy(token, "AgentNexus Public Marketplace", {
+      roleIds: [publicRole.id],
+      description: "Allows unauthenticated browser sessions to read public marketplace entries only.",
+    });
+    publicPolicyId = publicPolicy.id;
+
+    for (const permission of publicMarketplacePermissions) {
+      const created = await ensurePermission(token, publicPolicy.id, permission);
+      if (created) createdPermissions.push(`${permission.collection}:${permission.action}:public`);
+    }
+  }
+
+  return {
+    app_user_role_id: appUserRole.id,
+    app_user_policy_id: appUserPolicy.id,
+    public_policy_id: publicPolicyId,
+    created_permissions: createdPermissions,
+  };
 }
 
 async function existingMarketplaceEndpoints(token) {
@@ -440,6 +573,7 @@ async function main() {
   }
 
   const seeded_marketplace_servers = await seedMarketplace(token);
+  const access_policy = await ensureAccessPolicy(token);
 
   console.log(
     JSON.stringify(
@@ -448,6 +582,7 @@ async function main() {
         created_collections: createdCollections,
         created_relations: createdRelations,
         seeded_marketplace_servers,
+        access_policy,
       },
       null,
       2
