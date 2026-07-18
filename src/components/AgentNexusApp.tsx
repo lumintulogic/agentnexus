@@ -38,6 +38,7 @@ import {
   executeSdkToolCall,
   type CapabilityHandshake
 } from "@/lib/mcp";
+import { readEncryptedSessionSecrets, removeSessionSecret, sealSessionSecret } from "@/lib/session-vault";
 import "./AgentNexusApp.css";
 
 type ServerState = Record<string, MarketplaceServer["status"]>;
@@ -53,7 +54,7 @@ type ServerCredential = {
   mode: MarketplaceServer["authMode"];
   tokenRef: string;
   label: string;
-  authorizationHeader: string;
+  authorizationHeader?: string;
 };
 type AuthSession = {
   name: string;
@@ -87,6 +88,7 @@ const ssoProviders = [
 
 const authStorageKey = "agentnexus:auth-session";
 const serverCredentialStorageKey = "agentnexus:server-credentials";
+const serverSecretVaultStorageKey = "agentnexus:server-secret-vault";
 
 function getNextStatus(status: MarketplaceServer["status"]): MarketplaceServer["status"] {
   if (status === "available") return "installed";
@@ -157,6 +159,7 @@ export default function AgentNexusApp() {
     ? servers.find((server) => server.id === authDialogServerId) ?? null
     : null;
   const focusedCredential = serverCredentials[focusedServer.id];
+  const focusedCredentialReady = Boolean(focusedCredential?.authorizationHeader);
   const fallbackHandshake = useMemo(() => createMockCapabilityHandshake(focusedServer), [focusedServer]);
   const handshake = handshakeByServerId[focusedServer.id] ?? fallbackHandshake;
   const handshakeStatus = handshakeStatusByServerId[focusedServer.id] ?? "idle";
@@ -189,7 +192,22 @@ export default function AgentNexusApp() {
     const storedCredentials = sessionStorage.getItem(serverCredentialStorageKey);
     if (storedCredentials) {
       try {
-        setServerCredentials(JSON.parse(storedCredentials) as Record<string, ServerCredential>);
+        const storedRefs = JSON.parse(storedCredentials) as Record<string, ServerCredential>;
+        const vaultRefs = readEncryptedSessionSecrets(serverSecretVaultStorageKey);
+        setServerCredentials(
+          Object.fromEntries(
+            Object.entries(storedRefs)
+              .filter(([, credential]) => Boolean(vaultRefs[credential.tokenRef]))
+              .map(([serverId, credential]) => [
+                serverId,
+                {
+                  mode: credential.mode,
+                  tokenRef: credential.tokenRef,
+                  label: "Encrypted token reference saved; reconnect to attach Authorization"
+                }
+              ])
+          )
+        );
       } catch {
         sessionStorage.removeItem(serverCredentialStorageKey);
       }
@@ -307,7 +325,7 @@ export default function AgentNexusApp() {
 
   async function cycleServerStatus(server: MarketplaceServer) {
     const nextStatus = getNextStatus(server.status);
-    if (server.authMode !== "none" && !serverCredentials[server.id]) {
+    if (server.authMode !== "none" && !serverCredentials[server.id]?.authorizationHeader) {
       setActiveServerId(server.id);
       setAuthDialogServerId(server.id);
       setPendingServerStatus(nextStatus);
@@ -335,18 +353,29 @@ export default function AgentNexusApp() {
   }
 
   function persistServerCredentials(nextCredentials: Record<string, ServerCredential>) {
-    sessionStorage.setItem(serverCredentialStorageKey, JSON.stringify(nextCredentials));
+    const persistedRefs = Object.fromEntries(
+      Object.entries(nextCredentials).map(([serverId, credential]) => [
+        serverId,
+        {
+          mode: credential.mode,
+          tokenRef: credential.tokenRef,
+          label: credential.label
+        }
+      ])
+    );
+    sessionStorage.setItem(serverCredentialStorageKey, JSON.stringify(persistedRefs));
     setServerCredentials(nextCredentials);
   }
 
-  function connectServerCredential(server: MarketplaceServer) {
+  async function connectServerCredential(server: MarketplaceServer) {
     if (server.authMode === "bearer" && serverTokenDraft.trim().length < 8) return;
 
-    const tokenRef = `session:${crypto.randomUUID()}`;
+    const tokenRef = `session:${server.id}:${crypto.randomUUID()}`;
     const authorizationHeader =
       server.authMode === "oauth"
         ? `Bearer oauth_${crypto.randomUUID()}`
         : `Bearer ${serverTokenDraft.trim()}`;
+    await sealSessionSecret(serverSecretVaultStorageKey, tokenRef, authorizationHeader);
     const credential: ServerCredential = {
       mode: server.authMode,
       tokenRef,
@@ -381,6 +410,8 @@ export default function AgentNexusApp() {
   }
 
   function clearServerCredential(serverId: string) {
+    const tokenRef = serverCredentials[serverId]?.tokenRef;
+    if (tokenRef) removeSessionSecret(serverSecretVaultStorageKey, tokenRef);
     const { [serverId]: _removed, ...rest } = serverCredentials;
     persistServerCredentials(rest);
   }
@@ -441,7 +472,7 @@ export default function AgentNexusApp() {
 
     if (command === "/tool" && toolName) {
       try {
-        if (focusedServer.authMode !== "none" && !focusedCredential) {
+        if (focusedServer.authMode !== "none" && !focusedCredentialReady) {
           setAuthDialogServerId(focusedServer.id);
           setPendingServerStatus(focusedServer.status === "available" ? "installed" : focusedServer.status);
           setMessages((current) => [
@@ -458,7 +489,7 @@ export default function AgentNexusApp() {
           return;
         }
 
-        const authContext = focusedCredential
+        const authContext = focusedCredential?.authorizationHeader
           ? {
               tokenRef: focusedCredential.tokenRef,
               authorizationHeader: focusedCredential.authorizationHeader
@@ -798,7 +829,9 @@ export default function AgentNexusApp() {
                   <span>
                     {focusedServer.authMode === "none"
                       ? "No token required"
-                      : focusedCredential?.label ?? `${focusedServer.authMode.toUpperCase()} token required`}
+                      : focusedCredentialReady
+                        ? focusedCredential?.label
+                        : focusedCredential?.label ?? `${focusedServer.authMode.toUpperCase()} token required`}
                   </span>
                 </div>
                 {focusedCredential && (

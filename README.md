@@ -14,7 +14,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - Mock MCP marketplace registry, local WebSocket MCP fixture, and SDK capability handshake path added.
 - Browser app now attempts to load public MCP marketplace records from Directus and falls back to the prototype registry when Directus is unavailable.
 - Auth screen includes a Directus/Keycloak broker entry point and can hydrate a session from a returned Directus access token.
-- Server authorization dialog added for OAuth/Bearer MCP integrations with automatic Authorization attachment for tool calls.
+- Server authorization dialog added for OAuth/Bearer MCP integrations with encrypted session vault references and automatic Authorization attachment for tool calls.
 - MCP tool-call execution path added for `/tool <tool_name> <query>` chat intents, with SDK execution and mock fallback.
 - Model connection dialog added for provider, endpoint, model ID, and session-scoped API-key metadata.
 - Local Directus and Keycloak compose stacks added under `server/` for the product data and upstream SSO layers.

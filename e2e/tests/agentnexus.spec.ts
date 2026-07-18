@@ -86,6 +86,9 @@ test.describe("AgentNexus scaffold", () => {
     await expect(marketplace.locator("article", { hasText: "Postgres Tools" }).getByText("Installed")).toBeVisible();
     await expect(runtime.getByText("Bearer token post... stored for this session")).toBeVisible();
     await expect(runtime.getByText("Using session-only install state")).toBeVisible();
+    const serializedSessionStorage = await page.evaluate(() => JSON.stringify(sessionStorage));
+    expect(serializedSessionStorage).not.toContain("postgres-test-token");
+    expect(serializedSessionStorage).toContain("ciphertext");
 
     await page.getByLabel("Install or activate Postgres Tools").click();
     await expect(marketplace.locator("article", { hasText: "Postgres Tools" }).getByText("Active")).toBeVisible();
