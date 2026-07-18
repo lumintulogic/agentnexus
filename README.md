@@ -154,6 +154,19 @@ GitHub Actions also deploys `main` through `.github/workflows/cloudflare-deploy.
 
 The workflow runs `npm ci`, `npm run build`, then `npx wrangler pages deploy dist --project-name agentnexus --branch main`.
 
+## Prototype OIDC Issuer
+
+AgentNexus exposes a prototype OIDC issuer for downstream MCP apps:
+
+- `/.well-known/openid-configuration`
+- `/oidc/authorize`
+- `/oidc/token`
+- `/oidc/userinfo`
+- `/oidc/jwks.json`
+- `/oidc/register`
+
+Set `PUBLIC_AGENTNEXUS_ISSUER` in `.env` when the browser/dev-server origin is not the issuer URL you want in discovery metadata.
+
 ## Next Plan
 
 - Complete Keycloak-backed login by persisting/syncing AgentNexus-owned Directus user profiles after SSO callback.
