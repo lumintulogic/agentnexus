@@ -85,6 +85,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - `.github/workflows/cloudflare-deploy.yml` deploys `main` to Cloudflare Pages with Wrangler.
 - `tools/mock-mcp-websocket-server.mjs` is a local JSON-RPC WebSocket fixture for live MCP capability discovery tests.
 - `server/` contains local Directus and Keycloak compose stacks plus initialization scripts for the product data and identity broker layers.
+- `server/directus/verify-agentnexus-integration.mjs` verifies public marketplace reads and authenticated AgentNexus collection writes against a live Directus instance.
 
 ## Development
 

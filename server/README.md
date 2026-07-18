@@ -42,6 +42,15 @@ cd server/directus
 node setup-agentnexus-schema.mjs
 ```
 
+Verify Directus browser/API integration after the schema setup:
+
+```sh
+cd server/directus
+node verify-agentnexus-integration.mjs
+```
+
+The verifier logs in with the Directus admin credentials, confirms public marketplace reads work without an access token, creates a temporary app user with the AgentNexus role, verifies authenticated writes to profile, install, model, tenant, role, app, and private MCP server collections, then deletes the temporary records.
+
 Both scripts are idempotent. Existing collections, relations, realm roles, clients, configured identity providers, seeded public marketplace servers, and prototype Directus access policies are left in place or updated to the expected local development shape.
 
 The Directus initializer prints `access_policy.app_user_role_id`. Set `AUTH_KEYCLOAK_DEFAULT_ROLE_ID` in `server/directus/.env` to that value when Keycloak-created Directus users should be able to sync AgentNexus profile, install, model, tenant, and private MCP metadata.
