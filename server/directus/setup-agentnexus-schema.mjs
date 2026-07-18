@@ -272,6 +272,61 @@ const relations = [
   ["anx_oidc_grants", "tenant", "anx_tenants"],
 ];
 
+const marketplaceSeeds = [
+  {
+    name: "GitHub Workspace",
+    vendor: "GitHub",
+    category: "Developer tools",
+    transport: "streamable_http",
+    auth_mode: "oauth",
+    visibility: "public",
+    status: "active",
+    endpoint_url: "https://mcp.agentnexus.dev/github",
+    description: "Repository search, issue triage, pull request summaries, and release automation.",
+    tool_schema: [
+      { name: "search_repositories" },
+      { name: "summarize_pull_request" },
+      { name: "create_issue" },
+    ],
+  },
+  {
+    name: "Google Drive",
+    vendor: "Google Workspace",
+    category: "Productivity",
+    transport: "streamable_http",
+    auth_mode: "oauth",
+    visibility: "public",
+    status: "installed",
+    endpoint_url: "https://mcp.agentnexus.dev/google-drive",
+    description: "File discovery, document extraction, folder organization, and permission checks.",
+    tool_schema: [{ name: "list_files" }, { name: "extract_document" }, { name: "update_permissions" }],
+  },
+  {
+    name: "Postgres Tools",
+    vendor: "AgentNexus Labs",
+    category: "Database",
+    transport: "websocket",
+    auth_mode: "bearer",
+    visibility: "public",
+    status: "available",
+    endpoint_url: "ws://localhost:8787/mcp/postgres",
+    description: "Schema introspection, safe read queries, explain plans, and migration previews.",
+    tool_schema: [{ name: "inspect_schema" }, { name: "run_read_query" }, { name: "explain_query" }],
+  },
+  {
+    name: "Browser Actions",
+    vendor: "Community",
+    category: "Automation",
+    transport: "local_bridge",
+    auth_mode: "none",
+    visibility: "public",
+    status: "available",
+    endpoint_url: "ws://localhost:8787/mcp/browser",
+    description: "Page navigation, DOM extraction, screenshots, and structured web task execution.",
+    tool_schema: [{ name: "open_page" }, { name: "extract_content" }, { name: "capture_screenshot" }],
+  },
+];
+
 function readEnv(filePath) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Missing ${filePath}. Copy .env.example to .env and fill the local secrets first.`);
@@ -338,6 +393,29 @@ async function createRelation(token, collection, fieldName, relatedCollection) {
   });
 }
 
+async function existingMarketplaceEndpoints(token) {
+  const data = await directusRequest(
+    "GET",
+    "/items/anx_mcp_servers?limit=-1&fields=endpoint_url",
+    token
+  );
+  return new Set(data.data.map((item) => item.endpoint_url).filter(Boolean));
+}
+
+async function seedMarketplace(token) {
+  const endpointSet = await existingMarketplaceEndpoints(token);
+  const createdServers = [];
+
+  for (const seed of marketplaceSeeds) {
+    if (endpointSet.has(seed.endpoint_url)) continue;
+    await directusRequest("POST", "/items/anx_mcp_servers", token, seed);
+    endpointSet.add(seed.endpoint_url);
+    createdServers.push(seed.name);
+  }
+
+  return createdServers;
+}
+
 async function main() {
   const token = await getToken();
   const collectionSet = await existingCollections(token);
@@ -361,7 +439,20 @@ async function main() {
     createdRelations.push(`${key}->${relatedCollection}`);
   }
 
-  console.log(JSON.stringify({ directus_url: directusUrl, created_collections: createdCollections, created_relations: createdRelations }, null, 2));
+  const seeded_marketplace_servers = await seedMarketplace(token);
+
+  console.log(
+    JSON.stringify(
+      {
+        directus_url: directusUrl,
+        created_collections: createdCollections,
+        created_relations: createdRelations,
+        seeded_marketplace_servers,
+      },
+      null,
+      2
+    )
+  );
 }
 
 main().catch((error) => {

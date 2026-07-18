@@ -212,6 +212,10 @@ h3 {
   font-weight: 800;
 }
 
+.directus-sso {
+  grid-column: 1 / -1;
+}
+
 .auth-form {
   display: grid;
   gap: 12px;
@@ -234,6 +238,20 @@ h3 {
 
 .panel-heading {
   gap: 8px;
+}
+
+.panel-heading small {
+  margin-left: auto;
+  color: #5e6b78;
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.panel-note {
+  margin: -6px 0 10px;
+  color: #7b5b14;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .panel-heading.compact {

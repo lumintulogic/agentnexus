@@ -42,4 +42,15 @@ cd server/directus
 node setup-agentnexus-schema.mjs
 ```
 
-Both scripts are idempotent. Existing collections, relations, realm roles, clients, and configured identity providers are left in place or updated to the expected local development shape.
+Both scripts are idempotent. Existing collections, relations, realm roles, clients, configured identity providers, and seeded public marketplace servers are left in place or updated to the expected local development shape.
+
+## Frontend Integration
+
+The browser app reads these public env values from the repo root `.env`:
+
+```sh
+PUBLIC_DIRECTUS_URL=http://localhost:8055
+PUBLIC_DIRECTUS_KEYCLOAK_PROVIDER=keycloak
+```
+
+Directus must allow the app origin through CORS for browser-side marketplace reads. In local development, uncomment the CORS values in `server/directus/.env` when running the Astro dev server from another port.

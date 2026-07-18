@@ -12,6 +12,8 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - React dashboard shell implemented from the PRD twin-panel layout.
 - Mock sign-up/login gate added with email auth and multiple SSO entry points.
 - Mock MCP marketplace registry, local WebSocket MCP fixture, and SDK capability handshake path added.
+- Browser app now attempts to load public MCP marketplace records from Directus and falls back to the prototype registry when Directus is unavailable.
+- Auth screen includes a Directus/Keycloak broker entry point and can hydrate a session from a returned Directus access token.
 - Server authorization dialog added for OAuth/Bearer MCP integrations with automatic Authorization attachment for tool calls.
 - MCP tool-call execution path added for `/tool <tool_name> <query>` chat intents, with SDK execution and mock fallback.
 - Model connection dialog added for provider, endpoint, model ID, and session-scoped API-key metadata.
@@ -91,6 +93,14 @@ Install root dependencies:
 npm install
 ```
 
+Copy the browser-facing local env example if you want the app to use local Directus and Keycloak:
+
+```sh
+cp .env.example .env
+```
+
+The defaults point to `http://localhost:8055` and the Directus auth provider named `keycloak`.
+
 Run the Astro dev server:
 
 ```sh
@@ -146,7 +156,7 @@ The workflow runs `npm ci`, `npm run build`, then `npx wrangler pages deploy dis
 
 ## Next Plan
 
-- Replace mock app authentication with Keycloak-backed login and AgentNexus-owned Directus user profile sync.
+- Complete Keycloak-backed login by persisting/syncing AgentNexus-owned Directus user profiles after SSO callback.
 - Replace session-only server credential storage with encrypted token storage and vault references in the AgentNexus data layer.
 - Add AgentNexus OIDC issuer endpoints for downstream MCP app authentication.
 - Connect marketplace, tenant membership, installs, model connections, and token metadata to Directus collections.

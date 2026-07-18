@@ -14,6 +14,7 @@ test.describe("AgentNexus scaffold", () => {
 
     await expect(page.getByRole("region", { name: "Authentication" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Log in to your dashboard" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Keycloak" })).toBeVisible();
     await expect(page.getByLabel("Marketplace and server manager")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Google" }).click();
@@ -46,6 +47,7 @@ test.describe("AgentNexus scaffold", () => {
 
     await expect(page.getByRole("heading", { name: "AgentNexus" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Marketplace" })).toBeVisible();
+    await expect(marketplace.getByText("Prototype registry")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Model-agnostic Chat Playground" })).toBeVisible();
     await expect(page.getByText("Capability handshake ready")).toBeVisible();
     await expect(marketplace.getByText("GitHub Workspace", { exact: true })).toBeVisible();

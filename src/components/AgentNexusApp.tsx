@@ -24,6 +24,12 @@ import {
 import { useEffect, useMemo, useState } from "react";
 import { marketplaceServers, modelProviders, type MarketplaceServer } from "@/data/registry";
 import {
+  buildDirectusKeycloakLoginUrl,
+  loadDirectusAuthSession,
+  loadDirectusMarketplaceServers,
+  readDirectusAccessToken
+} from "@/lib/directus";
+import {
   createMockCapabilityHandshake,
   createSdkCapabilityHandshake,
   executeMockToolCall,
@@ -51,7 +57,9 @@ type AuthSession = {
   name: string;
   email: string;
   method: string;
+  directusUserId?: string;
 };
+type RegistrySource = "fallback" | "directus";
 
 const statusLabels: Record<MarketplaceServer["status"], string> = {
   active: "Active",
@@ -89,6 +97,9 @@ export default function AgentNexusApp() {
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [registryServers, setRegistryServers] = useState<MarketplaceServer[]>(marketplaceServers);
+  const [registrySource, setRegistrySource] = useState<RegistrySource>("fallback");
+  const [registryError, setRegistryError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(modelProviders[0]);
@@ -128,11 +139,11 @@ export default function AgentNexusApp() {
 
   const servers = useMemo(
     () =>
-      marketplaceServers.map((server) => ({
+      registryServers.map((server) => ({
         ...server,
         status: serverState[server.id] ?? server.status
       })),
-    [serverState]
+    [registryServers, serverState]
   );
 
   const activeServers = servers.filter((server) => server.status === "active");
@@ -150,6 +161,18 @@ export default function AgentNexusApp() {
   );
 
   useEffect(() => {
+    const directusToken = readDirectusAccessToken(window.location.search);
+    if (directusToken) {
+      loadDirectusAuthSession(directusToken)
+        .then((session) => {
+          createAuthSession(session);
+          window.history.replaceState(null, "", window.location.pathname);
+        })
+        .catch(() => {
+          window.history.replaceState(null, "", window.location.pathname);
+        });
+    }
+
     const storedSession = sessionStorage.getItem(authStorageKey);
     if (storedSession) {
       try {
@@ -167,6 +190,33 @@ export default function AgentNexusApp() {
       }
     }
     setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    loadDirectusMarketplaceServers()
+      .then((directusServers) => {
+        if (cancelled) return;
+        setRegistryServers(directusServers);
+        setRegistrySource("directus");
+        setRegistryError(null);
+        setServerState((current) =>
+          Object.fromEntries(directusServers.map((server) => [server.id, current[server.id] ?? server.status]))
+        );
+        setActiveServerId((current) =>
+          directusServers.some((server) => server.id === current) ? current : (directusServers[0]?.id ?? current)
+        );
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setRegistrySource("fallback");
+        setRegistryError(error instanceof Error ? error.message : "Directus marketplace lookup failed.");
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -237,6 +287,10 @@ export default function AgentNexusApp() {
       email: `${provider.toLowerCase()}@agentnexus.local`,
       method: `${provider} SSO`
     });
+  }
+
+  function continueWithKeycloak() {
+    window.location.assign(buildDirectusKeycloakLoginUrl(window.location.href));
   }
 
   function signOut() {
@@ -460,6 +514,10 @@ export default function AgentNexusApp() {
           </div>
 
           <div className="sso-grid">
+            <button className="sso-button directus-sso" type="button" onClick={continueWithKeycloak}>
+              <ShieldCheck size={17} aria-hidden="true" />
+              <span>Keycloak</span>
+            </button>
             {ssoProviders.map(({ id, name, icon: Icon }) => (
               <button key={id} className="sso-button" type="button" onClick={() => continueWithSso(name)}>
                 <Icon size={17} aria-hidden="true" />
@@ -553,7 +611,9 @@ export default function AgentNexusApp() {
           <div className="panel-heading">
             <Store size={18} aria-hidden="true" />
             <h2>Marketplace</h2>
+            <small>{registrySource === "directus" ? "Directus registry" : "Prototype registry"}</small>
           </div>
+          {registryError && <p className="panel-note">{registryError}</p>}
 
           <div className="server-list">
             {servers
