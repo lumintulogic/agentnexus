@@ -20,9 +20,15 @@ Use this checklist at the start of every new session before making changes.
    - For this repo, use AgentNexus board `146`.
    - Do not update any other board unless the user explicitly asks.
    - Add progress comments to the relevant cards after meaningful work or verification.
+   - Move cards to the proper lane after a planning decision or implementation is actually resolved, not only by adding comments.
+   - The exposed Lakon MCP tools may not include a move-card operation. If a move is required, use the Deck API fallback with the existing Lakon auth header from `/home/happy/.codex/config.toml`; do not print the token. The reliable cross-stack endpoint is `PUT https://repository.lumintulogic.com/index.php/apps/deck/cards/{cardId}/reorder` with JSON like `{"stackId":443,"order":999}`. The documented `/boards/{boardId}/stacks/{stackId}/cards/{cardId}/reorder` endpoint can return 200 while failing to move cards across stacks on this Deck version.
 
 5. Review planned tasks from the board before expanding scope.
-   - Current planned AgentNexus cards include mock MCP WebSocket server, real MCP SDK handshake, auth/token mock flow, MCP tool execution pipeline, storage/provider decision, and Cloudflare deployment workflow.
+   - Current board lanes after the Directus/Keycloak setup and app MCP SDK work:
+     - Completed: initial scaffold/UI/PWA/E2E work, mock MCP WebSocket server (`2407`), MCP SDK handshake (`2408`), Directus instance/schema/init automation (`2414`), persistent storage provider decision via Directus (`2411`), and OIDC broker contract definition (`2417`).
+     - Next: authentication/token runtime work (`2409`) and MCP tool execution pipeline (`2410`).
+     - Backlog: Cloudflare deployment workflow (`2412`).
+   - Directus answers the persistent storage provider decision. Directus also provides persistence for auth/token and OIDC broker metadata, but it does not by itself finish the app/runtime work for real login, token vault behavior, auth header attachment, token issuance, or MCP tool execution.
 
 ## Development Commands
 
