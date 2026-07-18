@@ -27,6 +27,8 @@ import {
   buildDirectusKeycloakLoginUrl,
   loadDirectusAuthSession,
   loadDirectusMarketplaceServers,
+  persistDirectusModelConnection,
+  persistDirectusServerInstall,
   readDirectusAccessToken
 } from "@/lib/directus";
 import {
@@ -57,7 +59,9 @@ type AuthSession = {
   name: string;
   email: string;
   method: string;
+  accessToken?: string;
   directusUserId?: string;
+  profileId?: string;
 };
 type RegistrySource = "fallback" | "directus";
 
@@ -100,6 +104,7 @@ export default function AgentNexusApp() {
   const [registryServers, setRegistryServers] = useState<MarketplaceServer[]>(marketplaceServers);
   const [registrySource, setRegistrySource] = useState<RegistrySource>("fallback");
   const [registryError, setRegistryError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState("Session state only");
   const [query, setQuery] = useState("");
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(modelProviders[0]);
@@ -264,7 +269,8 @@ export default function AgentNexusApp() {
   }, [authSession, focusedServer, handshakeAttempt]);
 
   function createAuthSession(session: AuthSession) {
-    sessionStorage.setItem(authStorageKey, JSON.stringify(session));
+    const { accessToken: _accessToken, ...storedSession } = session;
+    sessionStorage.setItem(authStorageKey, JSON.stringify(storedSession));
     setAuthSession(session);
   }
 
@@ -299,7 +305,7 @@ export default function AgentNexusApp() {
     setAuthPassword("");
   }
 
-  function cycleServerStatus(server: MarketplaceServer) {
+  async function cycleServerStatus(server: MarketplaceServer) {
     const nextStatus = getNextStatus(server.status);
     if (server.authMode !== "none" && !serverCredentials[server.id]) {
       setActiveServerId(server.id);
@@ -310,6 +316,22 @@ export default function AgentNexusApp() {
     }
     setServerState((current) => ({ ...current, [server.id]: nextStatus }));
     setActiveServerId(server.id);
+    if (registrySource === "directus") {
+      try {
+        const result = await persistDirectusServerInstall({
+          accessToken: authSession?.accessToken,
+          profileId: authSession?.profileId,
+          serverId: server.id,
+          status: nextStatus,
+          lastToolSchema: handshake.tools
+        });
+        setSyncStatus(result.detail);
+      } catch (error) {
+        setSyncStatus(error instanceof Error ? error.message : "Directus install sync failed");
+      }
+    } else {
+      setSyncStatus("Using session-only install state");
+    }
   }
 
   function persistServerCredentials(nextCredentials: Record<string, ServerCredential>) {
@@ -337,14 +359,25 @@ export default function AgentNexusApp() {
     const nextCredentials = { ...serverCredentials, [server.id]: credential };
 
     persistServerCredentials(nextCredentials);
-    setServerState((current) => ({
-      ...current,
-      [server.id]: pendingServerStatus ?? getNextStatus(server.status)
-    }));
+    const nextStatus = pendingServerStatus ?? getNextStatus(server.status);
+    setServerState((current) => ({ ...current, [server.id]: nextStatus }));
     setActiveServerId(server.id);
     setAuthDialogServerId(null);
     setPendingServerStatus(null);
     setServerTokenDraft("");
+    if (registrySource === "directus") {
+      persistDirectusServerInstall({
+        accessToken: authSession?.accessToken,
+        profileId: authSession?.profileId,
+        serverId: server.id,
+        status: nextStatus,
+        lastToolSchema: handshake.tools
+      })
+        .then((result) => setSyncStatus(result.detail))
+        .catch((error) => setSyncStatus(error instanceof Error ? error.message : "Directus install sync failed"));
+    } else {
+      setSyncStatus("Using session-only install state");
+    }
   }
 
   function clearServerCredential(serverId: string) {
@@ -359,13 +392,14 @@ export default function AgentNexusApp() {
     setApiKey("");
   }
 
-  function connectModel(event: { preventDefault: () => void }) {
+  async function connectModel(event: { preventDefault: () => void }) {
     event.preventDefault();
+    const tokenRef = requiresApiKey ? `session:${crypto.randomUUID()}` : null;
     setSelectedModel(draftProvider);
     setConnectedModelId(modelId.trim());
     setModelSecretLabel(
       requiresApiKey
-        ? `Encrypted ${draftProvider} token stored in session vault`
+        ? `${draftProvider} token reference stored for this session`
         : `${draftProvider} local endpoint connected`
     );
     sessionStorage.setItem(
@@ -374,9 +408,22 @@ export default function AgentNexusApp() {
         provider: draftProvider,
         modelId: modelId.trim(),
         endpoint: modelEndpoint.trim() || null,
-        tokenRef: requiresApiKey ? `session:${crypto.randomUUID()}` : null
+        tokenRef
       })
     );
+    try {
+      const result = await persistDirectusModelConnection({
+        accessToken: authSession?.accessToken,
+        profileId: authSession?.profileId,
+        provider: draftProvider,
+        modelId: modelId.trim(),
+        endpointUrl: modelEndpoint.trim() || null,
+        tokenRef
+      });
+      setSyncStatus(result.detail);
+    } catch (error) {
+      setSyncStatus(error instanceof Error ? error.message : "Directus model sync failed");
+    }
     setModelDialogOpen(false);
   }
 
@@ -766,6 +813,10 @@ export default function AgentNexusApp() {
                 <div className="auth-state">
                   <Bot size={18} aria-hidden="true" />
                   <span>{modelSecretLabel}</span>
+                </div>
+                <div className="auth-state">
+                  <Store size={18} aria-hidden="true" />
+                  <span>{syncStatus}</span>
                 </div>
               </section>
 

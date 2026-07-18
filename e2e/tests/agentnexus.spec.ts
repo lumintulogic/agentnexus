@@ -85,6 +85,7 @@ test.describe("AgentNexus scaffold", () => {
 
     await expect(marketplace.locator("article", { hasText: "Postgres Tools" }).getByText("Installed")).toBeVisible();
     await expect(runtime.getByText("Bearer token post... stored for this session")).toBeVisible();
+    await expect(runtime.getByText("Using session-only install state")).toBeVisible();
 
     await page.getByLabel("Install or activate Postgres Tools").click();
     await expect(marketplace.locator("article", { hasText: "Postgres Tools" }).getByText("Active")).toBeVisible();
@@ -109,7 +110,8 @@ test.describe("AgentNexus scaffold", () => {
     await dialog.getByRole("button", { name: "Connect model" }).click();
 
     await expect(page.getByRole("button", { name: "Selected model: Anthropic" })).toBeVisible();
-    await expect(page.getByText("Encrypted Anthropic token stored in session vault")).toBeVisible();
+    await expect(page.getByText("Anthropic token reference stored for this session")).toBeVisible();
+    await expect(page.getByText("Using session-only model connection")).toBeVisible();
     await expect(dialog).toHaveCount(0);
   });
 
