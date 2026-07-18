@@ -625,6 +625,11 @@ h3 {
   font-weight: 800;
 }
 
+.inline-action {
+  width: 100%;
+  margin-top: -8px;
+}
+
 .primary-button {
   color: #fff;
   border-color: #17202a;

@@ -24,9 +24,16 @@ export interface ToolExecutionResult {
   toolName: string;
   serverName: string;
   content: string;
+  source: "mock" | "sdk";
+  authAttached: boolean;
 }
 
 type McpTool = Awaited<ReturnType<Client["listTools"]>>["tools"][number];
+
+export interface ToolAuthContext {
+  tokenRef?: string | null;
+  authorizationHeader?: string | null;
+}
 
 function mapMcpTool(tool: McpTool, server: MarketplaceServer): ToolDefinition {
   const inputSchema =
@@ -114,10 +121,68 @@ export async function createSdkCapabilityHandshake(server: MarketplaceServer): P
   }
 }
 
+function textFromToolResult(result: Awaited<ReturnType<Client["callTool"]>>): string {
+  const content = (result as { content?: unknown }).content;
+  if (!Array.isArray(content)) return "Tool returned no displayable content.";
+
+  return content
+    .map((part) => {
+      if (!part || typeof part !== "object" || !("type" in part)) return "[unknown result]";
+      const typedPart = part as { type: string; text?: string; resource?: { text?: string } };
+      if (typedPart.type === "text") return typedPart.text ?? "";
+      if (typedPart.type === "resource" && typedPart.resource?.text) return typedPart.resource.text;
+      return `[${typedPart.type} result]`;
+    })
+    .join("\n");
+}
+
+export async function executeSdkToolCall(
+  server: MarketplaceServer,
+  toolName: string,
+  query: string,
+  authContext: ToolAuthContext = {}
+): Promise<ToolExecutionResult> {
+  if (server.transport !== "WebSocket") {
+    return executeMockToolCall(server, toolName, query, authContext);
+  }
+
+  const client = new Client({ name: "agentnexus-browser", version: "0.1.0" });
+  const transport = new WebSocketClientTransport(new URL(server.endpoint));
+
+  try {
+    await client.connect(transport);
+    const result = await client.callTool({
+      name: toolName,
+      arguments: { query },
+      _meta: authContext.authorizationHeader
+        ? {
+            agentnexus: {
+              authHeaders: {
+                Authorization: authContext.authorizationHeader
+              },
+              tokenRef: authContext.tokenRef ?? null
+            }
+          }
+        : undefined
+    });
+
+    return {
+      toolName,
+      serverName: server.name,
+      content: textFromToolResult(result),
+      source: "sdk",
+      authAttached: Boolean(authContext.authorizationHeader)
+    };
+  } finally {
+    await client.close();
+  }
+}
+
 export function executeMockToolCall(
   server: MarketplaceServer,
   toolName: string,
-  query: string
+  query: string,
+  authContext: ToolAuthContext = {}
 ): ToolExecutionResult {
   if (!server.tools.includes(toolName)) {
     throw new Error(`${toolName} is not exposed by ${server.name}.`);
@@ -126,6 +191,8 @@ export function executeMockToolCall(
   return {
     toolName,
     serverName: server.name,
-    content: `${toolName} accepted "${query}" through ${server.endpoint}.`
+    content: `${toolName} accepted "${query}" through ${server.endpoint}.`,
+    source: "mock",
+    authAttached: Boolean(authContext.authorizationHeader)
   };
 }

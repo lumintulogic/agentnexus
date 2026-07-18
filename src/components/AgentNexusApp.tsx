@@ -27,6 +27,7 @@ import {
   createMockCapabilityHandshake,
   createSdkCapabilityHandshake,
   executeMockToolCall,
+  executeSdkToolCall,
   type CapabilityHandshake
 } from "@/lib/mcp";
 import "./AgentNexusApp.css";
@@ -40,6 +41,12 @@ type ChatMessage = {
 };
 type AuthMode = "login" | "signup";
 type HandshakeStatus = "idle" | "connecting" | "ready" | "fallback";
+type ServerCredential = {
+  mode: MarketplaceServer["authMode"];
+  tokenRef: string;
+  label: string;
+  authorizationHeader: string;
+};
 type AuthSession = {
   name: string;
   email: string;
@@ -67,6 +74,7 @@ const ssoProviders = [
 ];
 
 const authStorageKey = "agentnexus:auth-session";
+const serverCredentialStorageKey = "agentnexus:server-credentials";
 
 function getNextStatus(status: MarketplaceServer["status"]): MarketplaceServer["status"] {
   if (status === "available") return "installed";
@@ -91,6 +99,10 @@ export default function AgentNexusApp() {
   const [modelId, setModelId] = useState(defaultModelIds[modelProviders[0]]);
   const [modelEndpoint, setModelEndpoint] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [serverCredentials, setServerCredentials] = useState<Record<string, ServerCredential>>({});
+  const [authDialogServerId, setAuthDialogServerId] = useState<string | null>(null);
+  const [pendingServerStatus, setPendingServerStatus] = useState<MarketplaceServer["status"] | null>(null);
+  const [serverTokenDraft, setServerTokenDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "handshake",
@@ -125,6 +137,10 @@ export default function AgentNexusApp() {
 
   const activeServers = servers.filter((server) => server.status === "active");
   const focusedServer = servers.find((server) => server.id === activeServerId) ?? servers[0];
+  const authDialogServer = authDialogServerId
+    ? servers.find((server) => server.id === authDialogServerId) ?? null
+    : null;
+  const focusedCredential = serverCredentials[focusedServer.id];
   const fallbackHandshake = useMemo(() => createMockCapabilityHandshake(focusedServer), [focusedServer]);
   const handshake = handshakeByServerId[focusedServer.id] ?? fallbackHandshake;
   const handshakeStatus = handshakeStatusByServerId[focusedServer.id] ?? "idle";
@@ -140,6 +156,14 @@ export default function AgentNexusApp() {
         setAuthSession(JSON.parse(storedSession) as AuthSession);
       } catch {
         sessionStorage.removeItem(authStorageKey);
+      }
+    }
+    const storedCredentials = sessionStorage.getItem(serverCredentialStorageKey);
+    if (storedCredentials) {
+      try {
+        setServerCredentials(JSON.parse(storedCredentials) as Record<string, ServerCredential>);
+      } catch {
+        sessionStorage.removeItem(serverCredentialStorageKey);
       }
     }
     setHydrated(true);
@@ -223,8 +247,55 @@ export default function AgentNexusApp() {
 
   function cycleServerStatus(server: MarketplaceServer) {
     const nextStatus = getNextStatus(server.status);
+    if (server.authMode !== "none" && !serverCredentials[server.id]) {
+      setActiveServerId(server.id);
+      setAuthDialogServerId(server.id);
+      setPendingServerStatus(nextStatus);
+      setServerTokenDraft("");
+      return;
+    }
     setServerState((current) => ({ ...current, [server.id]: nextStatus }));
     setActiveServerId(server.id);
+  }
+
+  function persistServerCredentials(nextCredentials: Record<string, ServerCredential>) {
+    sessionStorage.setItem(serverCredentialStorageKey, JSON.stringify(nextCredentials));
+    setServerCredentials(nextCredentials);
+  }
+
+  function connectServerCredential(server: MarketplaceServer) {
+    if (server.authMode === "bearer" && serverTokenDraft.trim().length < 8) return;
+
+    const tokenRef = `session:${crypto.randomUUID()}`;
+    const authorizationHeader =
+      server.authMode === "oauth"
+        ? `Bearer oauth_${crypto.randomUUID()}`
+        : `Bearer ${serverTokenDraft.trim()}`;
+    const credential: ServerCredential = {
+      mode: server.authMode,
+      tokenRef,
+      authorizationHeader,
+      label:
+        server.authMode === "oauth"
+          ? `OAuth token linked for ${server.vendor}`
+          : `Bearer token ${serverTokenDraft.trim().slice(0, 4)}... stored for this session`
+    };
+    const nextCredentials = { ...serverCredentials, [server.id]: credential };
+
+    persistServerCredentials(nextCredentials);
+    setServerState((current) => ({
+      ...current,
+      [server.id]: pendingServerStatus ?? getNextStatus(server.status)
+    }));
+    setActiveServerId(server.id);
+    setAuthDialogServerId(null);
+    setPendingServerStatus(null);
+    setServerTokenDraft("");
+  }
+
+  function clearServerCredential(serverId: string) {
+    const { [serverId]: _removed, ...rest } = serverCredentials;
+    persistServerCredentials(rest);
   }
 
   function selectDraftProvider(provider: string) {
@@ -255,7 +326,7 @@ export default function AgentNexusApp() {
     setModelDialogOpen(false);
   }
 
-  function sendPrompt() {
+  async function sendPrompt() {
     const trimmedPrompt = prompt.trim();
     if (!trimmedPrompt) return;
 
@@ -269,7 +340,33 @@ export default function AgentNexusApp() {
 
     if (command === "/tool" && toolName) {
       try {
-        const result = executeMockToolCall(focusedServer, toolName, queryParts.join(" ") || "No query supplied");
+        if (focusedServer.authMode !== "none" && !focusedCredential) {
+          setAuthDialogServerId(focusedServer.id);
+          setPendingServerStatus(focusedServer.status === "available" ? "installed" : focusedServer.status);
+          setMessages((current) => [
+            ...current,
+            userMessage,
+            {
+              id: `tool-auth-${Date.now()}`,
+              role: "assistant",
+              title: "Tool call needs authorization",
+              body: `${focusedServer.name} requires ${focusedServer.authMode.toUpperCase()} credentials before AgentNexus can attach Authorization and execute ${toolName}.`
+            }
+          ]);
+          setPrompt("");
+          return;
+        }
+
+        const authContext = focusedCredential
+          ? {
+              tokenRef: focusedCredential.tokenRef,
+              authorizationHeader: focusedCredential.authorizationHeader
+            }
+          : {};
+        const result =
+          handshake.source === "sdk"
+            ? await executeSdkToolCall(focusedServer, toolName, queryParts.join(" ") || "No query supplied", authContext)
+            : executeMockToolCall(focusedServer, toolName, queryParts.join(" ") || "No query supplied", authContext);
         setMessages((current) => [
           ...current,
           userMessage,
@@ -277,7 +374,9 @@ export default function AgentNexusApp() {
             id: `tool-${Date.now()}`,
             role: "assistant",
             title: `${result.toolName} result`,
-            body: result.content
+            body: `${result.content} (${result.source.toUpperCase()} execution${
+              result.authAttached ? ", Authorization attached" : ""
+            })`
           }
         ]);
       } catch (error) {
@@ -318,6 +417,9 @@ export default function AgentNexusApp() {
     authEmail.trim().length > 0 &&
     authPassword.trim().length >= 8 &&
     (authMode === "login" || authName.trim().length > 0);
+  const canConnectServerCredential =
+    authDialogServer?.authMode === "oauth" ||
+    (authDialogServer?.authMode === "bearer" && serverTokenDraft.trim().length >= 8);
 
   if (!authSession) {
     return (
@@ -589,9 +691,18 @@ export default function AgentNexusApp() {
                   <span>
                     {focusedServer.authMode === "none"
                       ? "No token required"
-                      : `${focusedServer.authMode.toUpperCase()} token stored in encrypted session scope`}
+                      : focusedCredential?.label ?? `${focusedServer.authMode.toUpperCase()} token required`}
                   </span>
                 </div>
+                {focusedCredential && (
+                  <button
+                    className="secondary-button inline-action"
+                    type="button"
+                    onClick={() => clearServerCredential(focusedServer.id)}
+                  >
+                    Forget server token
+                  </button>
+                )}
                 <div className="auth-state">
                   <Bot size={18} aria-hidden="true" />
                   <span>{modelSecretLabel}</span>
@@ -709,6 +820,84 @@ export default function AgentNexusApp() {
                 </button>
               </div>
             </form>
+          </section>
+        </div>
+      )}
+
+      {authDialogServer && (
+        <div className="dialog-backdrop" role="presentation">
+          <section
+            aria-labelledby="connect-server-auth-title"
+            aria-modal="true"
+            className="model-dialog"
+            role="dialog"
+          >
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">Server authorization</p>
+                <h2 id="connect-server-auth-title">Connect {authDialogServer.name}</h2>
+              </div>
+              <button
+                aria-label="Close server authorization dialog"
+                className="icon-button"
+                type="button"
+                onClick={() => {
+                  setAuthDialogServerId(null);
+                  setPendingServerStatus(null);
+                  setServerTokenDraft("");
+                }}
+              >
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            <div className="model-form">
+              <div className="connection-summary">
+                <KeyRound size={17} aria-hidden="true" />
+                <span>
+                  {authDialogServer.authMode === "oauth"
+                    ? `${authDialogServer.vendor} OAuth will be linked and referenced by a session token.`
+                    : "Paste a bearer token for this MCP server. The runtime will attach Authorization automatically."}
+                </span>
+              </div>
+
+              {authDialogServer.authMode === "bearer" && (
+                <label className="field-control">
+                  <span>Bearer token</span>
+                  <input
+                    aria-label="Bearer token"
+                    type="password"
+                    value={serverTokenDraft}
+                    placeholder="Minimum 8 characters"
+                    onChange={(event) => setServerTokenDraft(event.target.value)}
+                    minLength={8}
+                    required
+                  />
+                </label>
+              )}
+
+              <div className="dialog-actions">
+                <button
+                  className="secondary-button"
+                  type="button"
+                  onClick={() => {
+                    setAuthDialogServerId(null);
+                    setPendingServerStatus(null);
+                    setServerTokenDraft("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="primary-button"
+                  type="button"
+                  disabled={!canConnectServerCredential}
+                  onClick={() => connectServerCredential(authDialogServer)}
+                >
+                  {authDialogServer.authMode === "oauth" ? "Authorize server" : "Store token"}
+                </button>
+              </div>
+            </div>
           </section>
         </div>
       )}

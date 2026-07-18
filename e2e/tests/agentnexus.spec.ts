@@ -67,7 +67,7 @@ test.describe("AgentNexus scaffold", () => {
 
     await expect(runtime.getByText("inspect_schema")).toBeVisible();
     await expect(runtime.getByText("run_read_query")).toBeVisible();
-    await expect(runtime.getByText("BEARER token stored in encrypted session scope")).toBeVisible();
+    await expect(runtime.getByText("BEARER token required")).toBeVisible();
   });
 
   test("installs and activates integrations from server toggles", async ({ page }) => {
@@ -76,7 +76,13 @@ test.describe("AgentNexus scaffold", () => {
     const runtime = page.getByLabel("Runtime details");
 
     await page.getByLabel("Install or activate Postgres Tools").click();
+    const authDialog = page.getByRole("dialog", { name: "Connect Postgres Tools" });
+    await expect(authDialog).toBeVisible();
+    await authDialog.getByLabel("Bearer token").fill("postgres-test-token");
+    await authDialog.getByRole("button", { name: "Store token" }).click();
+
     await expect(marketplace.locator("article", { hasText: "Postgres Tools" }).getByText("Installed")).toBeVisible();
+    await expect(runtime.getByText("Bearer token post... stored for this session")).toBeVisible();
 
     await page.getByLabel("Install or activate Postgres Tools").click();
     await expect(marketplace.locator("article", { hasText: "Postgres Tools" }).getByText("Active")).toBeVisible();
@@ -113,7 +119,17 @@ test.describe("AgentNexus scaffold", () => {
     await page.getByLabel("Chat prompt").fill("/tool inspect_schema users");
     await page.getByLabel("Send prompt").click();
 
+    const authDialog = page.getByRole("dialog", { name: "Connect Postgres Tools" });
+    await expect(authDialog).toBeVisible();
+    await expect(page.getByText("Tool call needs authorization")).toBeVisible();
+    await authDialog.getByLabel("Bearer token").fill("postgres-test-token");
+    await authDialog.getByRole("button", { name: "Store token" }).click();
+
+    await page.getByLabel("Chat prompt").fill("/tool inspect_schema users");
+    await page.getByLabel("Send prompt").click();
+
     await expect(page.getByText("inspect_schema result")).toBeVisible();
     await expect(page.getByText('inspect_schema accepted "users" through ws://localhost:8787/mcp/postgres.')).toBeVisible();
+    await expect(page.getByText("Authorization attached")).toBeVisible();
   });
 });
