@@ -32,6 +32,11 @@ button {
   padding: 18px;
 }
 
+.auth-shell {
+  display: grid;
+  place-items: center;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
@@ -66,18 +71,25 @@ button {
 .panel-heading,
 .server-title-row,
 .server-meta,
+.session-card,
 .message,
 .composer,
 .auth-state,
 .dialog-header,
 .connection-summary,
-.dialog-actions {
+.dialog-actions,
+.auth-mode-switch,
+.sso-button {
   display: flex;
   align-items: center;
 }
 
 .brand-header {
   gap: 12px;
+}
+
+.auth-brand {
+  justify-content: center;
 }
 
 .brand-mark,
@@ -110,6 +122,12 @@ p {
   margin: 0;
 }
 
+small {
+  display: block;
+  color: #697586;
+  font-size: 0.76rem;
+}
+
 h1 {
   font-size: 1.45rem;
   line-height: 1.1;
@@ -131,6 +149,77 @@ h3 {
   border-radius: 8px;
   background: #fff;
   padding: 11px 12px;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 18px;
+  width: min(460px, 100%);
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 20px 80px rgba(23, 32, 42, 0.12);
+  padding: 22px;
+}
+
+.auth-copy {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+}
+
+.auth-copy h2 {
+  font-size: 1.35rem;
+}
+
+.auth-mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  background: #fff;
+  padding: 4px;
+}
+
+.auth-mode-switch button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 6px;
+  color: #485668;
+  background: transparent;
+  font-weight: 800;
+}
+
+.auth-mode-switch button.active {
+  color: #17202a;
+  background: #edf8f4;
+}
+
+.sso-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sso-button {
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border: 1px solid #d8d2c5;
+  border-radius: 8px;
+  color: #17202a;
+  background: #fff;
+  font-weight: 800;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 2px;
 }
 
 .search-control input,
@@ -221,6 +310,26 @@ h3 {
   margin-top: 12px;
   color: #697586;
   font-size: 0.78rem;
+}
+
+.session-card {
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #ddd7c8;
+  border-radius: 8px;
+  background: #fff;
+  padding: 10px;
+}
+
+.session-card span {
+  min-width: 0;
+}
+
+.session-card strong,
+.session-card small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .icon-button,
@@ -513,5 +622,9 @@ h3 {
   .dialog-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .sso-grid {
+    grid-template-columns: 1fr;
   }
 }

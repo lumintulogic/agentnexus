@@ -10,6 +10,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 
 - Astro app scaffolded with Cloudflare SSR output.
 - React dashboard shell implemented from the PRD twin-panel layout.
+- Mock sign-up/login gate added with email auth and multiple SSO entry points.
 - Mock MCP marketplace registry and capability handshake helper added.
 - PWA manifest and app icon added.
 - Isolated Playwright E2E subpackage added under `e2e/`.

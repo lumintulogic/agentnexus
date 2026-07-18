@@ -3,9 +3,43 @@ import { expect, type Page, test } from "@playwright/test";
 async function openApp(page: Page) {
   await page.goto("/");
   await expect(page.getByTestId("agentnexus-app")).toHaveAttribute("data-hydrated", "true");
+  await page.getByRole("button", { name: "GitHub" }).click();
+  await expect(page.getByLabel("Marketplace and server manager")).toBeVisible();
 }
 
 test.describe("AgentNexus scaffold", () => {
+  test("protects the dashboard behind authentication", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("agentnexus-app")).toHaveAttribute("data-hydrated", "true");
+
+    await expect(page.getByRole("region", { name: "Authentication" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Log in to your dashboard" })).toBeVisible();
+    await expect(page.getByLabel("Marketplace and server manager")).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Google" }).click();
+    await expect(page.getByLabel("Marketplace and server manager")).toBeVisible();
+    await expect(page.getByText("Google SSO")).toBeVisible();
+
+    await page.getByLabel("Sign out").click();
+    await expect(page.getByRole("region", { name: "Authentication" })).toBeVisible();
+    await expect(page.getByLabel("Marketplace and server manager")).toHaveCount(0);
+  });
+
+  test("creates an account with the email sign-up form", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.getByTestId("agentnexus-app")).toHaveAttribute("data-hydrated", "true");
+
+    await page.getByRole("button", { name: "Sign up" }).click();
+    await page.getByLabel("Name").fill("Ada Lovelace");
+    await page.getByLabel("Email").fill("ada@example.com");
+    await page.getByLabel("Password").fill("agentnexus");
+    await page.getByRole("button", { name: "Create account" }).click();
+
+    await expect(page.getByLabel("Marketplace and server manager")).toBeVisible();
+    await expect(page.getByText("Ada Lovelace")).toBeVisible();
+    await expect(page.getByText("Email sign-up")).toBeVisible();
+  });
+
   test("renders the marketplace and chat workspace", async ({ page }) => {
     await openApp(page);
     const marketplace = page.getByLabel("Marketplace and server manager");

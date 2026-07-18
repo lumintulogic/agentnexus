@@ -1,10 +1,15 @@
 import {
   Activity,
+  Apple,
   Bot,
+  Building2,
   Check,
   ChevronsUpDown,
+  Code2,
+  Globe,
   KeyRound,
   Link,
+  LogOut,
   PlugZap,
   Search,
   Send,
@@ -27,6 +32,12 @@ type ChatMessage = {
   title: string;
   body: string;
 };
+type AuthMode = "login" | "signup";
+type AuthSession = {
+  name: string;
+  email: string;
+  method: string;
+};
 
 const statusLabels: Record<MarketplaceServer["status"], string> = {
   active: "Active",
@@ -41,6 +52,15 @@ const defaultModelIds: Record<string, string> = {
   Custom: ""
 };
 
+const ssoProviders = [
+  { id: "google", name: "Google", icon: Globe },
+  { id: "github", name: "GitHub", icon: Code2 },
+  { id: "microsoft", name: "Microsoft", icon: Building2 },
+  { id: "apple", name: "Apple", icon: Apple }
+];
+
+const authStorageKey = "agentnexus:auth-session";
+
 function getNextStatus(status: MarketplaceServer["status"]): MarketplaceServer["status"] {
   if (status === "available") return "installed";
   if (status === "installed") return "active";
@@ -49,6 +69,11 @@ function getNextStatus(status: MarketplaceServer["status"]): MarketplaceServer["
 
 export default function AgentNexusApp() {
   const [hydrated, setHydrated] = useState(false);
+  const [authSession, setAuthSession] = useState<AuthSession | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [authName, setAuthName] = useState("");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
   const [query, setQuery] = useState("");
   const [prompt, setPrompt] = useState("");
   const [selectedModel, setSelectedModel] = useState(modelProviders[0]);
@@ -95,8 +120,48 @@ export default function AgentNexusApp() {
   );
 
   useEffect(() => {
+    const storedSession = sessionStorage.getItem(authStorageKey);
+    if (storedSession) {
+      try {
+        setAuthSession(JSON.parse(storedSession) as AuthSession);
+      } catch {
+        sessionStorage.removeItem(authStorageKey);
+      }
+    }
     setHydrated(true);
   }, []);
+
+  function createAuthSession(session: AuthSession) {
+    sessionStorage.setItem(authStorageKey, JSON.stringify(session));
+    setAuthSession(session);
+  }
+
+  function submitAuth(event: { preventDefault: () => void }) {
+    event.preventDefault();
+    const email = authEmail.trim();
+    if (!email || authPassword.trim().length < 8 || (authMode === "signup" && !authName.trim())) return;
+
+    createAuthSession({
+      name: authMode === "signup" ? authName.trim() : email.split("@")[0],
+      email,
+      method: authMode === "signup" ? "Email sign-up" : "Email login"
+    });
+    setAuthPassword("");
+  }
+
+  function continueWithSso(provider: string) {
+    createAuthSession({
+      name: `${provider} User`,
+      email: `${provider.toLowerCase()}@agentnexus.local`,
+      method: `${provider} SSO`
+    });
+  }
+
+  function signOut() {
+    sessionStorage.removeItem(authStorageKey);
+    setAuthSession(null);
+    setAuthPassword("");
+  }
 
   function cycleServerStatus(server: MarketplaceServer) {
     const nextStatus = getNextStatus(server.status);
@@ -191,6 +256,105 @@ export default function AgentNexusApp() {
     modelId.trim().length > 0 &&
     (!requiresEndpoint || modelEndpoint.trim().length > 0) &&
     (!requiresApiKey || apiKey.trim().length > 0);
+  const canSubmitAuth =
+    authEmail.trim().length > 0 &&
+    authPassword.trim().length >= 8 &&
+    (authMode === "login" || authName.trim().length > 0);
+
+  if (!authSession) {
+    return (
+      <main className="app-shell auth-shell" data-testid="agentnexus-app" data-hydrated={hydrated}>
+        <section className="auth-panel" aria-label="Authentication">
+          <header className="brand-header auth-brand">
+            <div className="brand-mark">
+              <PlugZap size={22} aria-hidden="true" />
+            </div>
+            <div>
+              <p className="eyebrow">MCP operating layer</p>
+              <h1>AgentNexus</h1>
+            </div>
+          </header>
+
+          <div className="auth-copy">
+            <p className="eyebrow">Secure workspace</p>
+            <h2>{authMode === "login" ? "Log in to your dashboard" : "Create your workspace"}</h2>
+          </div>
+
+          <div className="auth-mode-switch" aria-label="Authentication mode">
+            <button
+              className={authMode === "login" ? "active" : ""}
+              type="button"
+              aria-pressed={authMode === "login"}
+              onClick={() => setAuthMode("login")}
+            >
+              Log in
+            </button>
+            <button
+              className={authMode === "signup" ? "active" : ""}
+              type="button"
+              aria-pressed={authMode === "signup"}
+              onClick={() => setAuthMode("signup")}
+            >
+              Sign up
+            </button>
+          </div>
+
+          <div className="sso-grid">
+            {ssoProviders.map(({ id, name, icon: Icon }) => (
+              <button key={id} className="sso-button" type="button" onClick={() => continueWithSso(name)}>
+                <Icon size={17} aria-hidden="true" />
+                <span>{name}</span>
+              </button>
+            ))}
+          </div>
+
+          <form className="auth-form" onSubmit={submitAuth}>
+            {authMode === "signup" && (
+              <label className="field-control">
+                <span>Name</span>
+                <input
+                  aria-label="Name"
+                  value={authName}
+                  placeholder="Workspace owner"
+                  onChange={(event) => setAuthName(event.target.value)}
+                  required
+                />
+              </label>
+            )}
+
+            <label className="field-control">
+              <span>Email</span>
+              <input
+                aria-label="Email"
+                type="email"
+                value={authEmail}
+                placeholder="you@example.com"
+                onChange={(event) => setAuthEmail(event.target.value)}
+                required
+              />
+            </label>
+
+            <label className="field-control">
+              <span>Password</span>
+              <input
+                aria-label="Password"
+                type="password"
+                value={authPassword}
+                placeholder="Minimum 8 characters"
+                onChange={(event) => setAuthPassword(event.target.value)}
+                required
+                minLength={8}
+              />
+            </label>
+
+            <button className="primary-button auth-submit" type="submit" disabled={!canSubmitAuth}>
+              {authMode === "login" ? "Log in" : "Create account"}
+            </button>
+          </form>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="app-shell" data-testid="agentnexus-app" data-hydrated={hydrated}>
@@ -205,6 +369,16 @@ export default function AgentNexusApp() {
               <h1>AgentNexus</h1>
             </div>
           </header>
+
+          <div className="session-card" aria-label="Current account">
+            <span>
+              <strong>{authSession.name}</strong>
+              <small>{authSession.method}</small>
+            </span>
+            <button className="icon-button" type="button" aria-label="Sign out" title="Sign out" onClick={signOut}>
+              <LogOut size={18} aria-hidden="true" />
+            </button>
+          </div>
 
           <div className="search-control">
             <Search size={18} aria-hidden="true" />
