@@ -13,7 +13,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - Mock sign-up/login gate added with email auth and multiple SSO entry points.
 - Mock MCP marketplace registry, local WebSocket MCP fixture, and SDK capability handshake path added.
 - Browser app now attempts to load public MCP marketplace records from Directus and falls back to the prototype registry when Directus is unavailable.
-- Auth screen includes a Directus/Keycloak broker entry point and can hydrate a session from a returned Directus access token.
+- Auth screen includes a Directus/Keycloak broker entry point and can hydrate a session from either a Directus session cookie or returned Directus access token.
 - Server authorization dialog added for OAuth/Bearer MCP integrations with encrypted session vault references and automatic Authorization attachment for tool calls.
 - Enterprise private MCP registration added with tenant/app/role context and generated AgentNexus OIDC authorize URLs for invited users.
 - MCP tool-call execution path added for `/tool <tool_name> <query>` chat intents, with SDK execution and mock fallback.

@@ -65,3 +65,5 @@ PUBLIC_DIRECTUS_KEYCLOAK_PROVIDER=keycloak
 ```
 
 Directus must allow the app origin through CORS for browser-side marketplace reads. In local development, uncomment the CORS values in `server/directus/.env` when running the Astro dev server from another port.
+
+The frontend supports Directus Keycloak `session` mode. After Directus redirects back to the app, the browser probes `/users/me` with credentials included, stores only non-secret session profile metadata in `sessionStorage`, and uses the Directus session cookie for app metadata writes.

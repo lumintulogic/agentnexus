@@ -36,7 +36,7 @@ export type DirectusAuthSession = {
   name: string;
   email: string;
   method: string;
-  accessToken: string;
+  accessToken?: string;
   directusUserId?: string;
   profileId?: string;
 };
@@ -92,12 +92,12 @@ export function readDirectusAccessToken(search: string): string | null {
   return params.get("access_token") ?? params.get("directus_access_token") ?? params.get("token") ?? null;
 }
 
-export async function loadDirectusAuthSession(accessToken: string): Promise<DirectusAuthSession> {
+export async function loadDirectusAuthSession(accessToken?: string): Promise<DirectusAuthSession> {
+  const headers: HeadersInit = { Accept: "application/json" };
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   const response = await fetch(`${directusUrl}/users/me?fields=id,email,first_name,last_name`, {
-    headers: {
-      Accept: "application/json",
-      Authorization: `Bearer ${accessToken}`
-    }
+    credentials: "include",
+    headers
   });
 
   if (!response.ok) {
@@ -173,7 +173,7 @@ async function directusJson<T>(pathname: string, options: RequestInit = {}, acce
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
   if (options.body) headers.set("Content-Type", "application/json");
 
-  const response = await fetch(`${directusUrl}${pathname}`, { ...options, headers });
+  const response = await fetch(`${directusUrl}${pathname}`, { ...options, credentials: "include", headers });
   const text = await response.text();
   const payload = text ? JSON.parse(text) : null;
 
@@ -185,7 +185,7 @@ async function directusJson<T>(pathname: string, options: RequestInit = {}, acce
 }
 
 async function ensureAgentNexusProfile(
-  accessToken: string,
+  accessToken: string | undefined,
   session: Omit<DirectusAuthSession, "profileId">
 ): Promise<string> {
   const email = encodeURIComponent(session.email);
@@ -225,7 +225,7 @@ export async function persistDirectusServerInstall(input: {
   status: ServerStatus;
   lastToolSchema?: unknown;
 }): Promise<DirectusWriteResult> {
-  if (!input.accessToken || !input.profileId) {
+  if (!input.profileId) {
     return { ok: false, detail: "Using session-only install state" };
   }
 
@@ -266,7 +266,7 @@ export async function persistDirectusModelConnection(input: {
   endpointUrl?: string | null;
   tokenRef?: string | null;
 }): Promise<DirectusWriteResult> {
-  if (!input.accessToken || !input.profileId) {
+  if (!input.profileId) {
     return { ok: false, detail: "Using session-only model connection" };
   }
 
@@ -312,7 +312,7 @@ export async function persistDirectusPrivateMcpRegistration(input: {
   customHeaderName?: string | null;
   tools: string[];
 }): Promise<DirectusWriteResult & { tenantId?: string; appId?: string; roleId?: string; serverId?: string }> {
-  if (!input.accessToken || !input.profileId) {
+  if (!input.profileId) {
     return { ok: false, detail: "Private MCP registered for this session" };
   }
 

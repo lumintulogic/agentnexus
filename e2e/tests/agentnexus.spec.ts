@@ -185,9 +185,19 @@ test.describe("AgentNexus scaffold", () => {
     await expect(dialog).toHaveCount(0);
   });
 
-  test("hydrates Directus SSO session and syncs model metadata", async ({ page }) => {
+  test("hydrates Directus session-cookie SSO and syncs model metadata", async ({ page }) => {
     const directusWrites = await mockDirectus(page);
-    await page.goto("/?access_token=directus-test-token");
+    await page.context().addCookies([
+      {
+        name: "agentnexus_session_token",
+        value: "directus-cookie-session",
+        domain: "localhost",
+        path: "/",
+        httpOnly: true,
+        sameSite: "Lax"
+      }
+    ]);
+    await page.goto("/");
     await expect(page.getByTestId("agentnexus-app")).toHaveAttribute("data-hydrated", "true");
 
     const marketplace = page.getByLabel("Marketplace and server manager");
@@ -198,7 +208,7 @@ test.describe("AgentNexus scaffold", () => {
     await expect(marketplace.getByText("Directus Postgres", { exact: true })).toBeVisible();
 
     const serializedSessionStorage = await page.evaluate(() => JSON.stringify(sessionStorage));
-    expect(serializedSessionStorage).not.toContain("directus-test-token");
+    expect(serializedSessionStorage).not.toContain("directus-cookie-session");
 
     await page.getByRole("button", { name: "Selected model: OpenAI" }).click();
     const dialog = page.getByRole("dialog", { name: "Connect a Model" });

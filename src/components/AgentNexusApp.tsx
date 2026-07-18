@@ -204,12 +204,21 @@ export default function AgentNexusApp() {
     }
 
     const storedSession = sessionStorage.getItem(authStorageKey);
+    let restoredSession = false;
     if (storedSession) {
       try {
         setAuthSession(JSON.parse(storedSession) as AuthSession);
+        restoredSession = true;
       } catch {
         sessionStorage.removeItem(authStorageKey);
       }
+    }
+    if (!directusToken && !restoredSession) {
+      loadDirectusAuthSession()
+        .then((session) => {
+          createAuthSession(session);
+        })
+        .catch(() => undefined);
     }
     const storedCredentials = sessionStorage.getItem(serverCredentialStorageKey);
     if (storedCredentials) {
