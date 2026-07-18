@@ -44,6 +44,8 @@ services:
     user: "${DIRECTUS_UID:-1000}:${DIRECTUS_GID:-1000}"
     ports:
       - "${DIRECTUS_HOST_PORT:-8055}:8055"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./uploads:/directus/uploads
       - ./extensions:/directus/extensions

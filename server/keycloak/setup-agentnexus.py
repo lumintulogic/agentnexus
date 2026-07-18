@@ -25,6 +25,8 @@ base_url = f"http://localhost:{env.get('KEYCLOAK_HTTP_PORT', '8080')}"
 realm = env.get("AGENTNEXUS_REALM", "agentnexus")
 web_base_url = env.get("AGENTNEXUS_PUBLIC_BASE_URL", "http://localhost:4321")
 web_client_id = env.get("AGENTNEXUS_OIDC_CLIENT_ID", "agentnexus-web")
+directus_base_url = env.get("DIRECTUS_PUBLIC_URL", "http://localhost:8055")
+directus_client_id = env.get("DIRECTUS_OIDC_CLIENT_ID", "directus")
 
 
 def request(method, path, token=None, payload=None, form=None, expected=(200, 201, 204, 409)):
@@ -168,10 +170,35 @@ def ensure_clients(token):
         "authorizationServicesEnabled": False,
     }
 
-    return {
+    clients = {
         web_client_id: upsert_client(token, web_client_id, web_payload),
         "agentnexus-api": upsert_client(token, "agentnexus-api", api_payload),
     }
+
+    directus_client_secret = env.get("DIRECTUS_OIDC_CLIENT_SECRET")
+    if directus_client_secret:
+        directus_payload = {
+            "clientId": directus_client_id,
+            "name": "Directus Admin",
+            "description": "Directus Studio login through the AgentNexus Keycloak realm.",
+            "enabled": True,
+            "protocol": "openid-connect",
+            "publicClient": False,
+            "secret": directus_client_secret,
+            "standardFlowEnabled": True,
+            "implicitFlowEnabled": False,
+            "directAccessGrantsEnabled": False,
+            "serviceAccountsEnabled": False,
+            "frontchannelLogout": True,
+            "redirectUris": [f"{directus_base_url}/auth/login/keycloak/callback"],
+            "webOrigins": [directus_base_url],
+            "attributes": {
+                "post.logout.redirect.uris": f"{directus_base_url}/*",
+            },
+        }
+        clients[directus_client_id] = upsert_client(token, directus_client_id, directus_payload)
+
+    return clients
 
 
 def ensure_identity_providers(token):
