@@ -240,6 +240,16 @@ h3 {
   margin-bottom: 10px;
 }
 
+.panel-heading.split {
+  justify-content: space-between;
+}
+
+.panel-heading.split span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .server-list {
   display: grid;
   gap: 10px;
@@ -353,6 +363,11 @@ h3 {
   padding: 0;
 }
 
+.icon-button.small {
+  width: 30px;
+  height: 30px;
+}
+
 .topbar {
   justify-content: space-between;
   gap: 14px;
@@ -446,6 +461,40 @@ h3 {
 .active-server-list {
   display: grid;
   gap: 8px;
+}
+
+.handshake-state,
+.handshake-error {
+  border-radius: 8px;
+  margin-bottom: 8px;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.handshake-state {
+  border: 1px solid #cfeae2;
+  color: #245341;
+  background: #f3fbf8;
+}
+
+.handshake-state.connecting {
+  border-color: #d8d2c5;
+  color: #485668;
+  background: #fff;
+}
+
+.handshake-state.fallback {
+  border-color: #ffe5b4;
+  color: #744210;
+  background: #fff8e8;
+}
+
+.handshake-error {
+  border: 1px solid #f0c8c0;
+  color: #8a3024;
+  background: #fff0ed;
+  overflow-wrap: anywhere;
 }
 
 .tool-row,

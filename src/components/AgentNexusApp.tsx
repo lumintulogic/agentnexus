@@ -11,6 +11,7 @@ import {
   Link,
   LogOut,
   PlugZap,
+  RefreshCw,
   Search,
   Send,
   ShieldCheck,
@@ -22,7 +23,12 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { marketplaceServers, modelProviders, type MarketplaceServer } from "@/data/registry";
-import { createMockCapabilityHandshake, executeMockToolCall } from "@/lib/mcp";
+import {
+  createMockCapabilityHandshake,
+  createSdkCapabilityHandshake,
+  executeMockToolCall,
+  type CapabilityHandshake
+} from "@/lib/mcp";
 import "./AgentNexusApp.css";
 
 type ServerState = Record<string, MarketplaceServer["status"]>;
@@ -33,6 +39,7 @@ type ChatMessage = {
   body: string;
 };
 type AuthMode = "login" | "signup";
+type HandshakeStatus = "idle" | "connecting" | "ready" | "fallback";
 type AuthSession = {
   name: string;
   email: string;
@@ -102,6 +109,10 @@ export default function AgentNexusApp() {
     Object.fromEntries(marketplaceServers.map((server) => [server.id, server.status]))
   );
   const [activeServerId, setActiveServerId] = useState("github");
+  const [handshakeByServerId, setHandshakeByServerId] = useState<Record<string, CapabilityHandshake>>({});
+  const [handshakeStatusByServerId, setHandshakeStatusByServerId] = useState<Record<string, HandshakeStatus>>({});
+  const [handshakeErrorByServerId, setHandshakeErrorByServerId] = useState<Record<string, string>>({});
+  const [handshakeAttempt, setHandshakeAttempt] = useState(0);
 
   const servers = useMemo(
     () =>
@@ -114,7 +125,10 @@ export default function AgentNexusApp() {
 
   const activeServers = servers.filter((server) => server.status === "active");
   const focusedServer = servers.find((server) => server.id === activeServerId) ?? servers[0];
-  const handshake = createMockCapabilityHandshake(focusedServer);
+  const fallbackHandshake = useMemo(() => createMockCapabilityHandshake(focusedServer), [focusedServer]);
+  const handshake = handshakeByServerId[focusedServer.id] ?? fallbackHandshake;
+  const handshakeStatus = handshakeStatusByServerId[focusedServer.id] ?? "idle";
+  const handshakeError = handshakeErrorByServerId[focusedServer.id];
   const visibleMessages = messages.map((message) =>
     message.id === "handshake" ? { ...message, body: handshake.promptFragment } : message
   );
@@ -130,6 +144,50 @@ export default function AgentNexusApp() {
     }
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!authSession) return;
+
+    let cancelled = false;
+    const fallback = createMockCapabilityHandshake(focusedServer);
+
+    if (focusedServer.transport !== "WebSocket") {
+      setHandshakeByServerId((current) => ({ ...current, [focusedServer.id]: fallback }));
+      setHandshakeStatusByServerId((current) => ({ ...current, [focusedServer.id]: "fallback" }));
+      setHandshakeErrorByServerId((current) => {
+        const { [focusedServer.id]: _removed, ...rest } = current;
+        return rest;
+      });
+      return;
+    }
+
+    setHandshakeByServerId((current) => ({ ...current, [focusedServer.id]: current[focusedServer.id] ?? fallback }));
+    setHandshakeStatusByServerId((current) => ({ ...current, [focusedServer.id]: "connecting" }));
+    setHandshakeErrorByServerId((current) => {
+      const { [focusedServer.id]: _removed, ...rest } = current;
+      return rest;
+    });
+
+    createSdkCapabilityHandshake(focusedServer)
+      .then((sdkHandshake) => {
+        if (cancelled) return;
+        setHandshakeByServerId((current) => ({ ...current, [focusedServer.id]: sdkHandshake }));
+        setHandshakeStatusByServerId((current) => ({ ...current, [focusedServer.id]: "ready" }));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setHandshakeByServerId((current) => ({ ...current, [focusedServer.id]: fallback }));
+        setHandshakeStatusByServerId((current) => ({ ...current, [focusedServer.id]: "fallback" }));
+        setHandshakeErrorByServerId((current) => ({
+          ...current,
+          [focusedServer.id]: error instanceof Error ? error.message : "MCP SDK handshake failed."
+        }));
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authSession, focusedServer, handshakeAttempt]);
 
   function createAuthSession(session: AuthSession) {
     sessionStorage.setItem(authStorageKey, JSON.stringify(session));
@@ -486,10 +544,31 @@ export default function AgentNexusApp() {
 
             <aside className="runtime-panel" aria-label="Runtime details">
               <section>
-                <div className="panel-heading compact">
-                  <TerminalSquare size={17} aria-hidden="true" />
-                  <h3>Tool Definitions</h3>
+                <div className="panel-heading compact split">
+                  <span>
+                    <TerminalSquare size={17} aria-hidden="true" />
+                    <h3>Tool Definitions</h3>
+                  </span>
+                  {focusedServer.transport === "WebSocket" && (
+                    <button
+                      className="icon-button small"
+                      type="button"
+                      aria-label={`Refresh ${focusedServer.name} MCP handshake`}
+                      title={`Refresh ${focusedServer.name} MCP handshake`}
+                      onClick={() => setHandshakeAttempt((attempt) => attempt + 1)}
+                    >
+                      <RefreshCw size={15} aria-hidden="true" />
+                    </button>
+                  )}
                 </div>
+                <div className={`handshake-state ${handshakeStatus}`}>
+                  {handshakeStatus === "connecting"
+                    ? "Connecting to MCP server"
+                    : handshake.source === "sdk"
+                      ? "SDK-discovered MCP tools"
+                      : "Registry capability fallback"}
+                </div>
+                {handshakeError && <div className="handshake-error">{handshakeError}</div>}
                 <div className="tool-list">
                   {handshake.tools.map((tool) => (
                     <div className="tool-row" key={tool.name}>

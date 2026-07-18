@@ -8,3 +8,6 @@ test-results/
 .env.*
 !.env.example
 .codex/config.toml
+server/directus/data/
+server/directus/extensions/
+server/directus/uploads/
