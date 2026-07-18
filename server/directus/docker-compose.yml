@@ -1,0 +1,68 @@
+services:
+  database:
+    image: postgis/postgis:13-master
+    # Required when running on platform other than amd64, like Apple M1/M2:
+    # platform: linux/amd64
+    volumes:
+      - ./data/database:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_DATABASE}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready --host=localhost --username=$${POSTGRES_USER} --dbname=$${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      #start_interval: 5s
+      start_period: 30s
+    restart: 'unless-stopped'
+
+  cache:
+    image: redis:6
+    healthcheck:
+      test: ["CMD-SHELL", "[ $$(redis-cli ping) = 'PONG' ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      #start_interval: 5s
+      start_period: 30s
+    restart: 'unless-stopped'
+
+  directus-volume-permissions:
+    image: alpine:3.20
+    command: >
+      sh -c "mkdir -p /directus/uploads /directus/extensions &&
+      chown -R ${DIRECTUS_UID:-1000}:${DIRECTUS_GID:-1000} /directus/uploads /directus/extensions"
+    volumes:
+      - ./uploads:/directus/uploads
+      - ./extensions:/directus/extensions
+    restart: "no"
+
+  directus:
+    image: directus/directus:11
+    user: "${DIRECTUS_UID:-1000}:${DIRECTUS_GID:-1000}"
+    ports:
+      - "${DIRECTUS_HOST_PORT:-8055}:8055"
+    volumes:
+      - ./uploads:/directus/uploads
+      - ./extensions:/directus/extensions
+    depends_on:
+      database:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+      directus-volume-permissions:
+        condition: service_completed_successfully
+    restart: 'unless-stopped'
+    env_file:
+      - .env
+    environment:
+      DB_CLIENT: "pg"
+      DB_HOST: "database"
+      DB_PORT: "5432"
+
+      CACHE_ENABLED: "true"
+      CACHE_AUTO_PURGE: "true"
+      CACHE_STORE: "redis"
+      REDIS: "redis://cache:6379"
