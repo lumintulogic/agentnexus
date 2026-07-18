@@ -9,6 +9,7 @@
     "deploy:preview": "ASTRO_TELEMETRY_DISABLED=1 npm run build && WRANGLER_LOG_PATH=.wrangler/logs wrangler pages deploy dist --project-name agentnexus --branch preview",
     "deploy:production": "ASTRO_TELEMETRY_DISABLED=1 npm run build && WRANGLER_LOG_PATH=.wrangler/logs wrangler pages deploy dist --project-name agentnexus --branch main",
     "mock:mcp": "node tools/mock-mcp-websocket-server.mjs",
+    "smoke:prototype": "node tools/prototype-smoke.mjs",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
     "astro": "ASTRO_TELEMETRY_DISABLED=1 astro"
   },

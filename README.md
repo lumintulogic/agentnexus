@@ -117,6 +117,14 @@ npm run mock:mcp
 
 It listens at `ws://localhost:8787/mcp/postgres` and supports `initialize`, `tools/list`, and `tools/call`.
 
+Run the prototype smoke verifier:
+
+```sh
+npm run smoke:prototype
+```
+
+The smoke verifier starts the Astro dev server and mock MCP WebSocket server, checks OIDC discovery/registration/authorization/token/userinfo/JWKS, and checks MCP `tools/list` plus `tools/call`.
+
 Build and type-check the app:
 
 ```sh
