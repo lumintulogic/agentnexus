@@ -39,7 +39,7 @@ import {
   executeSdkToolCall,
   type CapabilityHandshake
 } from "@/lib/mcp";
-import { readEncryptedSessionSecrets, removeSessionSecret, sealSessionSecret } from "@/lib/session-vault";
+import { openSessionSecret, readEncryptedSessionSecrets, removeSessionSecret, sealSessionSecret } from "@/lib/session-vault";
 import "./AgentNexusApp.css";
 
 type ServerState = Record<string, MarketplaceServer["status"]>;
@@ -62,6 +62,7 @@ type AuthSession = {
   email: string;
   method: string;
   accessToken?: string;
+  authTokenRef?: string;
   directusUserId?: string;
   profileId?: string;
 };
@@ -98,6 +99,7 @@ const ssoProviders = [
 ];
 
 const authStorageKey = "agentnexus:auth-session";
+const authSecretVaultStorageKey = "agentnexus:auth-secret-vault";
 const serverCredentialStorageKey = "agentnexus:server-credentials";
 const serverSecretVaultStorageKey = "agentnexus:server-secret-vault";
 
@@ -195,7 +197,7 @@ export default function AgentNexusApp() {
     if (directusToken) {
       loadDirectusAuthSession(directusToken)
         .then((session) => {
-          createAuthSession(session);
+          void createAuthSession(session);
           window.history.replaceState(null, "", window.location.pathname);
         })
         .catch(() => {
@@ -207,7 +209,23 @@ export default function AgentNexusApp() {
     let restoredSession = false;
     if (storedSession) {
       try {
-        setAuthSession(JSON.parse(storedSession) as AuthSession);
+        const session = JSON.parse(storedSession) as AuthSession;
+        if (session.authTokenRef) {
+          const vaultRecord = readEncryptedSessionSecrets(authSecretVaultStorageKey)[session.authTokenRef];
+          if (vaultRecord) {
+            openSessionSecret(vaultRecord)
+              .then((accessToken) => {
+                setAuthSession({ ...session, accessToken });
+              })
+              .catch(() => {
+                setAuthSession(session);
+              });
+          } else {
+            setAuthSession(session);
+          }
+        } else {
+          setAuthSession(session);
+        }
         restoredSession = true;
       } catch {
         sessionStorage.removeItem(authStorageKey);
@@ -216,7 +234,7 @@ export default function AgentNexusApp() {
     if (!directusToken && !restoredSession) {
       loadDirectusAuthSession()
         .then((session) => {
-          createAuthSession(session);
+          void createAuthSession(session);
         })
         .catch(() => undefined);
     }
@@ -317,10 +335,15 @@ export default function AgentNexusApp() {
     };
   }, [authSession, focusedServer, handshakeAttempt]);
 
-  function createAuthSession(session: AuthSession) {
-    const { accessToken: _accessToken, ...storedSession } = session;
+  async function createAuthSession(session: AuthSession) {
+    let authTokenRef = session.authTokenRef;
+    if (session.accessToken) {
+      authTokenRef = `directus:${session.directusUserId ?? session.email}:${crypto.randomUUID()}`;
+      await sealSessionSecret(authSecretVaultStorageKey, authTokenRef, session.accessToken);
+    }
+    const { accessToken: _accessToken, ...storedSession } = { ...session, authTokenRef };
     sessionStorage.setItem(authStorageKey, JSON.stringify(storedSession));
-    setAuthSession(session);
+    setAuthSession({ ...session, authTokenRef });
   }
 
   function submitAuth(event: { preventDefault: () => void }) {
@@ -328,7 +351,7 @@ export default function AgentNexusApp() {
     const email = authEmail.trim();
     if (!email || authPassword.trim().length < 8 || (authMode === "signup" && !authName.trim())) return;
 
-    createAuthSession({
+    void createAuthSession({
       name: authMode === "signup" ? authName.trim() : email.split("@")[0],
       email,
       method: authMode === "signup" ? "Email sign-up" : "Email login"
@@ -337,7 +360,7 @@ export default function AgentNexusApp() {
   }
 
   function continueWithSso(provider: string) {
-    createAuthSession({
+    void createAuthSession({
       name: `${provider} User`,
       email: `${provider.toLowerCase()}@agentnexus.local`,
       method: `${provider} SSO`
@@ -350,6 +373,7 @@ export default function AgentNexusApp() {
 
   function signOut() {
     sessionStorage.removeItem(authStorageKey);
+    sessionStorage.removeItem(authSecretVaultStorageKey);
     setAuthSession(null);
     setAuthPassword("");
   }

@@ -226,6 +226,23 @@ test.describe("AgentNexus scaffold", () => {
     });
   });
 
+  test("intercepts Directus callback tokens into the encrypted session vault", async ({ page }) => {
+    await mockDirectus(page);
+    await page.goto("/?access_token=directus-callback-token");
+    await expect(page.getByTestId("agentnexus-app")).toHaveAttribute("data-hydrated", "true");
+
+    await expect(page.getByLabel("Marketplace and server manager")).toBeVisible();
+    await expect(page.getByText("Directus User")).toBeVisible();
+    await expect(page.getByText("Keycloak via Directus")).toBeVisible();
+    await expect(page).not.toHaveURL(/access_token=/);
+
+    const serializedSessionStorage = await page.evaluate(() => JSON.stringify(sessionStorage));
+    expect(serializedSessionStorage).not.toContain("directus-callback-token");
+    expect(serializedSessionStorage).toContain("agentnexus:auth-secret-vault");
+    expect(serializedSessionStorage).toContain("ciphertext");
+    expect(serializedSessionStorage).toContain("authTokenRef");
+  });
+
   test("registers an enterprise private MCP server with tenant OIDC context", async ({ page }) => {
     await openApp(page);
     const marketplace = page.getByLabel("Marketplace and server manager");

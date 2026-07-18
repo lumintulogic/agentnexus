@@ -2,10 +2,57 @@ import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { WebSocketClientTransport } from "@modelcontextprotocol/sdk/client/websocket.js";
+import { WebSocketServer } from "ws";
 
 const appBaseUrl = process.env.AGENTNEXUS_SMOKE_APP_URL ?? "http://127.0.0.1:4321";
 const mcpUrl = process.env.AGENTNEXUS_SMOKE_MCP_URL ?? "ws://127.0.0.1:8787/mcp/postgres";
 const startedProcesses = [];
+const startedServers = [];
+
+const mockMcpTools = [
+  {
+    name: "inspect_schema",
+    description: "Inspect tables and columns exposed by the mock Postgres MCP server.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Schema object or table name to inspect."
+        }
+      },
+      required: ["query"]
+    }
+  },
+  {
+    name: "run_read_query",
+    description: "Run a read-only SQL query against the mock Postgres MCP server.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Read-only SQL query."
+        }
+      },
+      required: ["query"]
+    }
+  },
+  {
+    name: "explain_query",
+    description: "Return a mock query plan for a read-only SQL query.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Read-only SQL query to explain."
+        }
+      },
+      required: ["query"]
+    }
+  }
+];
 
 function startProcess(command, args, readyText) {
   const child = spawn(command, args, {
@@ -30,10 +77,16 @@ function startProcess(command, args, readyText) {
 
     child.stdout.on("data", onData);
     child.stderr.on("data", onData);
-    child.on("exit", (code) => {
+    child.on("close", (code, signal) => {
       clearTimeout(timer);
       if (code !== 0 && !output.includes(readyText)) {
-        reject(new Error(`${command} ${args.join(" ")} exited with ${code}. Output: ${output.slice(-500)}`));
+        reject(
+          new Error(
+            `${command} ${args.join(" ")} exited with ${code}${signal ? ` (${signal})` : ""}. Output: ${output.slice(
+              -1000
+            )}`
+          )
+        );
       }
     });
   });
@@ -42,11 +95,105 @@ function startProcess(command, args, readyText) {
   return ready;
 }
 
+function jsonRpcResult(id, payload) {
+  return JSON.stringify({ jsonrpc: "2.0", id, result: payload });
+}
+
+function jsonRpcError(id, code, message) {
+  return JSON.stringify({ jsonrpc: "2.0", id, error: { code, message } });
+}
+
+function startEmbeddedMockMcpServer() {
+  const url = new URL(mcpUrl);
+  const port = Number.parseInt(url.port || "80", 10);
+  const host = url.hostname;
+  const server = new WebSocketServer({ host, port, path: url.pathname, handleProtocols: () => "mcp" });
+
+  server.on("connection", (socket) => {
+    socket.on("message", (rawMessage) => {
+      let message;
+      try {
+        message = JSON.parse(rawMessage.toString());
+      } catch {
+        socket.send(jsonRpcError(null, -32700, "Parse error"));
+        return;
+      }
+
+      if (message.method === "initialize") {
+        socket.send(
+          jsonRpcResult(message.id, {
+            protocolVersion: "2025-06-18",
+            capabilities: { tools: { listChanged: false } },
+            serverInfo: { name: "agentnexus-smoke-postgres", version: "0.1.0" },
+            instructions: "Use this mock server for AgentNexus smoke verification."
+          })
+        );
+        return;
+      }
+
+      if (message.method === "notifications/initialized") return;
+
+      if (message.method === "tools/list") {
+        socket.send(jsonRpcResult(message.id, { tools: mockMcpTools }));
+        return;
+      }
+
+      if (message.method === "tools/call") {
+        const toolName = message.params?.name;
+        const query = message.params?.arguments?.query ?? "";
+        if (!mockMcpTools.some((tool) => tool.name === toolName)) {
+          socket.send(jsonRpcError(message.id, -32602, `Unknown tool: ${toolName}`));
+          return;
+        }
+        socket.send(
+          jsonRpcResult(message.id, {
+            content: [{ type: "text", text: `${toolName} handled "${query}" on agentnexus-mock-postgres.` }]
+          })
+        );
+        return;
+      }
+
+      socket.send(jsonRpcError(message.id, -32601, `Unsupported method: ${message.method}`));
+    });
+  });
+
+  startedServers.push(server);
+  return new Promise((resolve, reject) => {
+    server.once("listening", resolve);
+    server.once("error", reject);
+  });
+}
+
 async function json(url, options) {
   const response = await fetch(url, options);
   const text = await response.text();
   if (!response.ok) throw new Error(`${url} returned ${response.status}: ${text.slice(0, 200)}`);
   return JSON.parse(text);
+}
+
+async function appIsAvailable() {
+  try {
+    const discovery = await json(`${appBaseUrl}/.well-known/openid-configuration`);
+    return discovery.authorization_endpoint === `${appBaseUrl}/oidc/authorize`;
+  } catch {
+    return false;
+  }
+}
+
+async function mcpIsAvailable() {
+  try {
+    const client = new Client({ name: "agentnexus-prototype-smoke-probe", version: "0.1.0" });
+    const transport = new WebSocketClientTransport(new URL(mcpUrl));
+    await client.connect(transport);
+    try {
+      const tools = await client.listTools();
+      return tools.tools.some((tool) => tool.name === "inspect_schema");
+    } finally {
+      await client.close();
+    }
+  } catch {
+    return false;
+  }
 }
 
 async function oidcSmoke() {
@@ -142,10 +289,15 @@ async function mcpSmoke() {
 }
 
 async function main() {
-  await Promise.all([
-    startProcess("npm", ["run", "dev", "--", "--host", "127.0.0.1"], "Local    http://127.0.0.1:4321/"),
-    startProcess("npm", ["run", "mock:mcp"], "AgentNexus mock MCP WebSocket server listening")
-  ]);
+  const startup = [];
+  const [appAvailable, mcpAvailable] = await Promise.all([appIsAvailable(), mcpIsAvailable()]);
+  if (!appAvailable) {
+    startup.push(startProcess("npm", ["run", "dev", "--", "--host", "127.0.0.1"], "Local    http://127.0.0.1:4321/"));
+  }
+  if (!mcpAvailable) {
+    startup.push(startEmbeddedMockMcpServer());
+  }
+  await Promise.all(startup);
 
   await delay(250);
   const [oidc, mcp] = await Promise.all([oidcSmoke(), mcpSmoke()]);
@@ -158,12 +310,19 @@ main()
     process.exitCode = 1;
   })
   .finally(() => {
+    for (const server of startedServers) {
+      server.close();
+    }
     for (const child of startedProcesses) {
       if (child.killed) continue;
-      if (process.platform === "win32") {
-        child.kill("SIGTERM");
-      } else {
-        process.kill(-child.pid, "SIGTERM");
+      try {
+        if (process.platform === "win32") {
+          child.kill("SIGTERM");
+        } else {
+          process.kill(-child.pid, "SIGTERM");
+        }
+      } catch (error) {
+        if (error?.code !== "ESRCH") throw error;
       }
     }
   });
