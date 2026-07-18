@@ -38,4 +38,4 @@ jobs:
         run: npm run build
 
       - name: Deploy to Cloudflare Workers
-        run: npx wrangler deploy --env=""
+        run: npx wrangler deploy

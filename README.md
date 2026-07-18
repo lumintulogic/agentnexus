@@ -145,7 +145,7 @@ The Playwright config starts the parent Astro dev server when needed and reuses 
 
 The app builds for Cloudflare Workers using the Astro Cloudflare adapter and `wrangler.jsonc`.
 
-`npm run build` emits the Worker module entry at `dist/_worker.js/index.js` and static assets under `dist/`. Wrangler deploys the Worker with `assets.directory` set to `./dist` and `run_worker_first` enabled so OIDC/API routes are handled by the Worker runtime.
+`npm run build` emits the Worker module entry at `dist/_worker.js/index.js`, static assets under `dist/`, and `dist/.assetsignore` so Wrangler does not upload the private `_worker.js` bundle as a public asset. Wrangler deploys the Worker with `assets.directory` set to `./dist` and `run_worker_first` enabled so OIDC/API routes are handled by the Worker runtime.
 
 Run a preview deployment:
 
@@ -164,7 +164,7 @@ GitHub Actions also deploys `main` through `.github/workflows/cloudflare-deploy.
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 
-The workflow runs `npm ci`, `npm run build`, then `npx wrangler deploy --env=""`.
+The workflow runs `npm ci`, `npm run build`, then `npx wrangler deploy`.
 
 ## Prototype OIDC Issuer
 

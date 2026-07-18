@@ -44,7 +44,7 @@ Use this checklist at the start of every new session before making changes.
 Notes:
 - Playwright may need permission to bind a local test server outside the sandbox.
 - The mock MCP server listens on `ws://127.0.0.1:8787/mcp/postgres`.
-- Deployment now targets Cloudflare Workers through `wrangler deploy`, with `dist/_worker.js/index.js` as the Worker entry and `dist/` as the static asset directory.
+- Deployment now targets Cloudflare Workers through `wrangler deploy`, with `dist/_worker.js/index.js` as the Worker entry and `dist/` as the static asset directory. The build writes `dist/.assetsignore` so Wrangler does not upload `_worker.js` as a public static asset.
 
 ## Verification Expectations
 
