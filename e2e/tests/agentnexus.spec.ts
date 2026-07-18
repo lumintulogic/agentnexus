@@ -7,6 +7,73 @@ async function openApp(page: Page) {
   await expect(page.getByLabel("Marketplace and server manager")).toBeVisible();
 }
 
+async function mockDirectus(page: Page) {
+  const writes: Array<{ url: string; method: string; body: unknown }> = [];
+
+  await page.route("http://localhost:8055/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const json = (data: unknown) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(data)
+      });
+
+    if (url.pathname === "/users/me") {
+      await json({
+        data: {
+          id: "directus-user-1",
+          email: "directus@example.com",
+          first_name: "Directus",
+          last_name: "User"
+        }
+      });
+      return;
+    }
+
+    if (url.pathname === "/items/anx_user_profiles" && request.method() === "GET") {
+      await json({ data: [{ id: "profile-1", email: "directus@example.com" }] });
+      return;
+    }
+
+    if (url.pathname === "/items/anx_mcp_servers" && request.method() === "GET") {
+      await json({
+        data: [
+          {
+            id: "directus-postgres",
+            name: "Directus Postgres",
+            vendor: "Directus Registry",
+            category: "Database",
+            transport: "websocket",
+            auth_mode: "bearer",
+            status: "available",
+            endpoint_url: "ws://localhost:8787/mcp/postgres",
+            description: "Directus supplied MCP server.",
+            tool_schema: [{ name: "inspect_schema" }, { name: "run_read_query" }]
+          }
+        ]
+      });
+      return;
+    }
+
+    if (url.pathname === "/items/anx_model_connections" && request.method() === "GET") {
+      await json({ data: [] });
+      return;
+    }
+
+    if (url.pathname === "/items/anx_model_connections" && request.method() === "POST") {
+      writes.push({ url: request.url(), method: request.method(), body: request.postDataJSON() });
+      await json({ data: { id: "model-connection-1" } });
+      return;
+    }
+
+    await route.fulfill({ status: 404, contentType: "application/json", body: JSON.stringify({ errors: [] }) });
+  });
+
+  return writes;
+}
+
 test.describe("AgentNexus scaffold", () => {
   test("protects the dashboard behind authentication", async ({ page }) => {
     await page.goto("/");
@@ -116,6 +183,37 @@ test.describe("AgentNexus scaffold", () => {
     await expect(page.getByText("Anthropic token reference stored for this session")).toBeVisible();
     await expect(page.getByText("Using session-only model connection")).toBeVisible();
     await expect(dialog).toHaveCount(0);
+  });
+
+  test("hydrates Directus SSO session and syncs model metadata", async ({ page }) => {
+    const directusWrites = await mockDirectus(page);
+    await page.goto("/?access_token=directus-test-token");
+    await expect(page.getByTestId("agentnexus-app")).toHaveAttribute("data-hydrated", "true");
+
+    const marketplace = page.getByLabel("Marketplace and server manager");
+    await expect(marketplace).toBeVisible();
+    await expect(page.getByText("Directus User")).toBeVisible();
+    await expect(page.getByText("Keycloak via Directus")).toBeVisible();
+    await expect(marketplace.getByText("Directus registry")).toBeVisible();
+    await expect(marketplace.getByText("Directus Postgres", { exact: true })).toBeVisible();
+
+    const serializedSessionStorage = await page.evaluate(() => JSON.stringify(sessionStorage));
+    expect(serializedSessionStorage).not.toContain("directus-test-token");
+
+    await page.getByRole("button", { name: "Selected model: OpenAI" }).click();
+    const dialog = page.getByRole("dialog", { name: "Connect a Model" });
+    await dialog.getByRole("button", { name: "Anthropic" }).click();
+    await dialog.getByLabel("API key").fill("sk-ant-test");
+    await dialog.getByRole("button", { name: "Connect model" }).click();
+
+    await expect(page.getByText("Model connection synced to Directus")).toBeVisible();
+    expect(directusWrites).toHaveLength(1);
+    expect(directusWrites[0].body).toMatchObject({
+      profile: "profile-1",
+      provider: "Anthropic",
+      model_id: "claude-3-5-sonnet-latest",
+      status: "connected"
+    });
   });
 
   test("registers an enterprise private MCP server with tenant OIDC context", async ({ page }) => {
