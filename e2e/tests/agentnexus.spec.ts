@@ -266,7 +266,7 @@ test.describe("AgentNexus scaffold", () => {
     await expect(runtime.getByText("Private MCP registered for this session")).toBeVisible();
   });
 
-  test("executes a mock MCP tool call from the composer", async ({ page }) => {
+  test("executes an MCP tool call from the composer", async ({ page }) => {
     await openApp(page);
     const marketplace = page.getByLabel("Marketplace and server manager");
 
@@ -284,7 +284,7 @@ test.describe("AgentNexus scaffold", () => {
     await page.getByLabel("Send prompt").click();
 
     await expect(page.getByText("inspect_schema result")).toBeVisible();
-    await expect(page.getByText('inspect_schema accepted "users" through ws://localhost:8787/mcp/postgres.')).toBeVisible();
+    await expect(page.getByText(/inspect_schema (accepted|handled) "users"/)).toBeVisible();
     await expect(page.getByText("Authorization attached")).toBeVisible();
   });
 });

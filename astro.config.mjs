@@ -8,7 +8,7 @@ export default defineConfig({
     driver: "memory"
   },
   adapter: cloudflare({
-    imageService: "compile"
+    imageService: "passthrough"
   }),
   integrations: [react()]
 });

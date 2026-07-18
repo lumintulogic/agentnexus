@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "ASTRO_TELEMETRY_DISABLED=1 astro dev",
     "build": "ASTRO_TELEMETRY_DISABLED=1 astro check && ASTRO_TELEMETRY_DISABLED=1 astro build",
-    "deploy:preview": "ASTRO_TELEMETRY_DISABLED=1 npm run build && WRANGLER_LOG_PATH=.wrangler/logs wrangler pages deploy dist --project-name agentnexus --branch preview",
-    "deploy:production": "ASTRO_TELEMETRY_DISABLED=1 npm run build && WRANGLER_LOG_PATH=.wrangler/logs wrangler pages deploy dist --project-name agentnexus --branch main",
+    "deploy:preview": "ASTRO_TELEMETRY_DISABLED=1 npm run build && WRANGLER_LOG_PATH=.wrangler/logs wrangler versions upload --env preview",
+    "deploy:production": "ASTRO_TELEMETRY_DISABLED=1 npm run build && WRANGLER_LOG_PATH=.wrangler/logs wrangler deploy --env=\"\"",
     "mock:mcp": "node tools/mock-mcp-websocket-server.mjs",
     "smoke:prototype": "node tools/prototype-smoke.mjs",
     "preview": "ASTRO_TELEMETRY_DISABLED=1 astro preview",
@@ -26,6 +26,7 @@
     "@astrojs/check": "^0.9.9",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "wrangler": "4.59.2"
   }
 }

@@ -19,7 +19,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - MCP tool-call execution path added for `/tool <tool_name> <query>` chat intents, with SDK execution and mock fallback.
 - Model connection dialog added for provider, endpoint, model ID, and session-scoped API-key metadata.
 - Local Directus and Keycloak compose stacks added under `server/` for the product data and upstream SSO layers.
-- Cloudflare Pages deployment scripts and GitHub Actions workflow added.
+- Cloudflare Workers deployment scripts and GitHub Actions workflow added.
 - PWA manifest and app icon added.
 - Isolated Playwright E2E subpackage added under `e2e/`.
 - Verified with `npm run build` and `cd e2e && npm test`.
@@ -82,7 +82,7 @@ Project tracking board: https://repository.lumintulogic.com/apps/deck/board/146
 - `src/pages/` contains Astro routes.
 - `public/` contains PWA metadata and static assets.
 - `e2e/` is a separate Node package for Playwright end-to-end tests.
-- `.github/workflows/cloudflare-deploy.yml` deploys `main` to Cloudflare Pages with Wrangler.
+- `.github/workflows/cloudflare-deploy.yml` deploys `main` to Cloudflare Workers with Wrangler.
 - `tools/mock-mcp-websocket-server.mjs` is a local JSON-RPC WebSocket fixture for live MCP capability discovery tests.
 - `server/` contains local Directus and Keycloak compose stacks plus initialization scripts for the product data and identity broker layers.
 - `server/directus/verify-agentnexus-integration.mjs` verifies public marketplace reads and authenticated AgentNexus collection writes against a live Directus instance.
@@ -143,7 +143,9 @@ The Playwright config starts the parent Astro dev server when needed and reuses 
 
 ## Cloudflare Deployment
 
-The app builds for Cloudflare Pages using the Astro Cloudflare adapter and `wrangler.jsonc`.
+The app builds for Cloudflare Workers using the Astro Cloudflare adapter and `wrangler.jsonc`.
+
+`npm run build` emits the Worker module entry at `dist/_worker.js/index.js` and static assets under `dist/`. Wrangler deploys the Worker with `assets.directory` set to `./dist` and `run_worker_first` enabled so OIDC/API routes are handled by the Worker runtime.
 
 Run a preview deployment:
 
@@ -162,7 +164,7 @@ GitHub Actions also deploys `main` through `.github/workflows/cloudflare-deploy.
 - `CLOUDFLARE_ACCOUNT_ID`
 - `CLOUDFLARE_API_TOKEN`
 
-The workflow runs `npm ci`, `npm run build`, then `npx wrangler pages deploy dist --project-name agentnexus --branch main`.
+The workflow runs `npm ci`, `npm run build`, then `npx wrangler deploy --env=""`.
 
 ## Prototype OIDC Issuer
 
